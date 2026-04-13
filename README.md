@@ -16,7 +16,7 @@ Na primeira execução, o `sss` inicializa a pasta `.sss/` e adiciona `.sss/modu
 
 ## Comandosss do Projeto
 
-Defina comandos no arquivo `.sss/config` (versssionado junto com o projeto):
+Defina comandos no arquivo `.sss/config.sh` (versssionado junto com o projeto):
 
 ```sh
 # Inicia o ambiente de desenvolvimento
@@ -26,7 +26,12 @@ cmd_start() {
 
 # Executa os testes
 cmd_test() {
-    docker exec app php artisan test
+    docker exec app php artisan test "$@"
+}
+
+# Comandosss com múltiplasss palavrasss
+cmd_docker_build() {
+    docker build .
 }
 ```
 
@@ -35,6 +40,19 @@ Execute com:
 ```sh
 ./sss start
 ./sss test --filter NomeDoTeste
+./sss docker build        # essspaço ou underssscore funcionam
+./sss docker_build        # equivalente
+```
+
+Sssub-comandosss com essspaço usssam longest-match: `./sss docker build prod` chama `cmd_docker_build "prod"`.
+
+Use `requires` dentro de um comando para garantir que módulosss necessssários essstejam inssstalados:
+
+```sh
+cmd_deploy() {
+    requires sss-docker
+    # ...
+}
 ```
 
 ## Módulosss
@@ -82,3 +100,5 @@ cp sss meu-projeto
 | `require <url>[@ref]` | Adiciona um módulo ao lockfile e inssstala |
 | `install` | Restaura todosss osss módulosss do lockfile |
 | `update [nome]` | Atualiza módulosss com constraint de branch |
+| `pin <versssão>` | Registra a versssão requerida do sss no lockfile |
+| `self-update [versssão]` | Atualiza o próprio sss |
