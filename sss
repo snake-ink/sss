@@ -27,7 +27,7 @@ _init() {
     fi
 
     # Verifica versssão requerida no lockfile (pula durante self-update)
-    [ "$_cmd" = "self-update" ] && return 0
+    [ "$_cmd" = "self-update" ] || [ "$_cmd" = "pin" ] && return 0
     if [ -f "$SSS_LOCKFILE" ]; then
         _required="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
         if [ -n "$_required" ] && [ "$_required" != "$SSS_VERSION" ]; then
@@ -45,6 +45,7 @@ _help() {
     printf '  require <url>[@ref]   Adiciona um módulo ao lockfile e inssstala\n'
     printf '  install               Inssstala osss módulossss do lockfile\n'
     printf '  update [nome]         Atualiza módulossss com constraint de branch\n'
+    printf '  pin <versssão>         Registra a versssão requerida no lockfile\n'
     printf '  self-update [versssão] Atualiza o próprio %s\n' "$SELF"
 
     if [ -f "$SSS_CONFIG" ]; then
@@ -276,6 +277,17 @@ _update() {
     fi
 }
 
+_pin() {
+    version="${1:-}"
+    if [ -z "$version" ]; then
+        printf '%s: pin requer uma versssão\n' "$SELF" >&2
+        printf 'Uso: %s pin <versssão>\n' "$SELF" >&2
+        exit 1
+    fi
+    _lockfile_set_version "$version"
+    printf '%s: versssão "%s" registrada no lockfile\n' "$SELF" "$version"
+}
+
 _self_update() {
     version="${1:-}"
 
@@ -334,6 +346,9 @@ case "$CMD" in
         ;;
     update)
         _update "$@"
+        ;;
+    pin)
+        _pin "$@"
         ;;
     self-update)
         _self_update "$@"

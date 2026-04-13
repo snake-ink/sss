@@ -36,6 +36,7 @@ O script inteiro é um único arquivo POSIX sh. As funções internas usam prefi
 - Primeira linha (opcional): `sss <versão>` — versão do próprio script requerida pelo projeto
 - Demais linhas: `<nome> <url> <tipo>:<ref> <commit-resolvido>` — módulos instalados
 - `_install` e `_update` pulam entradas com `mod_name == sss`
+- `pin` e `self-update` pulam o version check em `_init` (assim como `self-update`) para evitar deadlock ao trocar de versão
 
 **Dispatch de módulos vs config:**
 

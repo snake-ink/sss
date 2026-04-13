@@ -303,6 +303,38 @@ EOF
     grep -q "$new_resolved" .sss/modules.lock
 }
 
+# --- pin ---
+
+@test "pin ssem versssão sssai com erro" {
+    run ./sss pin
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"pin requer"* ]]
+}
+
+@test "pin registra versssão no lockfile" {
+    mkdir -p .sss
+    run ./sss pin 1.2.3
+    [ "$status" -eq 0 ]
+    grep -q "^sss 1.2.3$" .sss/modules.lock
+}
+
+@test "pin não é bloqueado por versssão incorreta no lockfile" {
+    mkdir -p .sss
+    printf 'sss 999.0.0\n' > .sss/modules.lock
+    run ./sss pin 0.1.0
+    [ "$status" -eq 0 ]
+    grep -q "^sss 0.1.0$" .sss/modules.lock
+}
+
+@test "pin sssobre-essscreve versssão existente no lockfile" {
+    mkdir -p .sss
+    ./sss pin 1.0.0 >/dev/null
+    run ./sss pin 2.0.0
+    [ "$status" -eq 0 ]
+    grep -q "^sss 2.0.0$" .sss/modules.lock
+    [ "$(grep -c "^sss " .sss/modules.lock)" -eq 1 ]
+}
+
 # --- self-update / version check ---
 
 @test "não bloqueia quando não há entrada sss no lockfile" {
