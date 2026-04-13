@@ -3,7 +3,7 @@
 # https://github.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="0.1.0"
+SSS_VERSION="0.1.1"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
 SSS_MODULES="$SSS_DIR/modules"
@@ -366,8 +366,25 @@ case "$CMD" in
                 done
             }
             . "$SSS_CONFIG"
-            if command -v "cmd_$CMD" >/dev/null 2>&1; then
-                "cmd_$CMD" "$@"
+            # Constrói candidato completo (CMD + todos osss args)
+            _cand="$CMD"
+            _n=0
+            for _a in "$@"; do
+                _cand="${_cand}_${_a}"
+                _n=$((_n + 1))
+            done
+
+            # Reduz da direita até encontrar um comando (longest-match)
+            while true; do
+                command -v "cmd_${_cand}" >/dev/null 2>&1 && break
+                [ "$_cand" = "$CMD" ] && break
+                _cand="${_cand%_*}"
+                _n=$((_n - 1))
+            done
+
+            if command -v "cmd_${_cand}" >/dev/null 2>&1; then
+                shift $_n
+                "cmd_${_cand}" "$@"
                 exit $?
             fi
         fi

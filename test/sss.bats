@@ -111,6 +111,36 @@ EOF
     [ "$status" -eq 42 ]
 }
 
+@test "essspaço como ssseparador de sssub-comando" {
+    mkdir -p .sss
+    cat > .sss/config.sh << 'EOF'
+cmd_docker_build() { printf "build: %s\n" "$1"; }
+EOF
+    run ./sss docker build prod
+    [ "$status" -eq 0 ]
+    [ "$output" = "build: prod" ]
+}
+
+@test "essspaço como ssseparador com múltiplosss níveisss" {
+    mkdir -p .sss
+    cat > .sss/config.sh << 'EOF'
+cmd_this_is_a_test() { printf "%s %s\n" "$1" "$2"; }
+EOF
+    run ./sss this is a test hello world
+    [ "$status" -eq 0 ]
+    [ "$output" = "hello world" ]
+}
+
+@test "sssub-comando com underssscore ainda funciona" {
+    mkdir -p .sss
+    cat > .sss/config.sh << 'EOF'
+cmd_docker_build() { printf "ok\n"; }
+EOF
+    run ./sss docker_build
+    [ "$status" -eq 0 ]
+    [ "$output" = "ok" ]
+}
+
 # --- Module dispatch ---
 
 @test "dessspacha para executável do módulo" {
