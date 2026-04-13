@@ -1,0 +1,370 @@
+#!/bin/sh
+# sss - vai uma mãozinha?
+# https://github.com/snake-ink/sss
+
+SELF="$(basename "$0")"
+SSS_VERSION="0.1.0"
+SSS_DIR=".sss"
+SSS_CONFIG="$SSS_DIR/config.sh"
+SSS_MODULES="$SSS_DIR/modules"
+SSS_LOCKFILE="$SSS_DIR/modules.lock"
+
+# Auto-inicializa .sss/ se essstiver em um repositório git
+_init() {
+    _cmd="$1"
+    [ -d ".git" ] || return 0
+    if ! command -v git >/dev/null 2>&1; then
+        printf '%s: git não encontrado. Inssstale o git para continuar.\n' "$SELF" >&2
+        exit 1
+    fi
+    if [ ! -d "$SSS_DIR" ]; then
+        mkdir -p "$SSS_MODULES"
+        touch "$SSS_CONFIG"
+        printf '%s: inicializado %s/\n' "$SELF" "$SSS_DIR" >&2
+    fi
+    if [ -f ".gitignore" ] && ! grep -qx ".sss/modules/" .gitignore 2>/dev/null; then
+        printf '\n.sss/modules/\n' >> .gitignore
+    fi
+
+    # Verifica versssão requerida no lockfile (pula durante self-update)
+    [ "$_cmd" = "self-update" ] && return 0
+    if [ -f "$SSS_LOCKFILE" ]; then
+        _required="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
+        if [ -n "$_required" ] && [ "$_required" != "$SSS_VERSION" ]; then
+            printf '%s: versssão "%s" requerida, rodando "%s"\n' "$SELF" "$_required" "$SSS_VERSION" >&2
+            printf 'Execute "%s self-update" para atualizar.\n' "$SELF" >&2
+            exit 1
+        fi
+    fi
+}
+
+_help() {
+    printf 'Uso: %s <comando> [argumentosss...]\n\n' "$SELF"
+    printf 'Comandosss internosss:\n'
+    printf '  help                  Exibe esssta ajuda\n'
+    printf '  require <url>[@ref]   Adiciona um módulo ao lockfile e inssstala\n'
+    printf '  install               Inssstala osss módulossss do lockfile\n'
+    printf '  update [nome]         Atualiza módulossss com constraint de branch\n'
+    printf '  self-update [versssão] Atualiza o próprio %s\n' "$SELF"
+
+    if [ -f "$SSS_CONFIG" ]; then
+        cmds=$(grep -E '^cmd_[a-zA-Z0-9_]+ *\(\)' "$SSS_CONFIG" | sed 's/^cmd_\([a-zA-Z0-9_]*\).*/\1/')
+        if [ -n "$cmds" ]; then
+            printf '\nComandosss do projeto:\n'
+            printf '%s\n' "$cmds" | while IFS= read -r cmd; do
+                [ -n "$cmd" ] || continue
+                desc=$(grep -B1 "^cmd_${cmd} *()" "$SSS_CONFIG" | grep '^#' | sed 's/^# *//' | tail -1)
+                if [ -n "$desc" ]; then
+                    printf '  %-18s %s\n' "$cmd" "$desc"
+                else
+                    printf '  %s\n' "$cmd"
+                fi
+            done
+        fi
+    fi
+
+    if [ -d "$SSS_MODULES" ]; then
+        mods=
+        for d in "$SSS_MODULES"/*/; do
+            [ -d "$d" ] && mods="${mods}$(basename "$d")\n"
+        done
+        if [ -n "$mods" ]; then
+            printf '\nMódulossss:\n'
+            printf "$mods" | while IFS= read -r mod; do
+                [ -n "$mod" ] && printf '  %s\n' "$mod"
+            done
+        fi
+    fi
+}
+
+# Atualiza ou adiciona uma entrada de módulo no lockfile (4 campos)
+_lockfile_set() {
+    lf_name="$1" lf_url="$2" lf_constraint="$3" lf_resolved="$4"
+    tmp="$(mktemp)"
+    grep -v "^$lf_name " "$SSS_LOCKFILE" > "$tmp" 2>/dev/null || true
+    printf '%s %s %s %s\n' "$lf_name" "$lf_url" "$lf_constraint" "$lf_resolved" >> "$tmp"
+    mv "$tmp" "$SSS_LOCKFILE"
+}
+
+# Atualiza ou adiciona a entrada de versssão do próprio sss no lockfile (2 campos)
+_lockfile_set_version() {
+    _version="$1"
+    tmp="$(mktemp)"
+    printf 'sss %s\n' "$_version" > "$tmp"
+    grep -v "^sss " "$SSS_LOCKFILE" >> "$tmp" 2>/dev/null || true
+    mv "$tmp" "$SSS_LOCKFILE"
+}
+
+# Detecta o tipo de uma ref em um repositório local: branch, tag ou commit
+_detect_ref_type() {
+    _repo="$1" _ref="$2"
+    if git -C "$_repo" rev-parse --verify "refs/heads/$_ref" >/dev/null 2>&1; then
+        _ref_type="branch"
+    elif git -C "$_repo" rev-parse --verify "refs/tags/$_ref" >/dev/null 2>&1; then
+        _ref_type="tag"
+    else
+        _ref_type="commit"
+    fi
+}
+
+# Parssseia "<url>[@ref]" nos componentesss _req_url e _req_ref
+_parse_require_arg() {
+    _input="$1"
+    case "$_input" in
+        *@*:*)
+            # SSH: git@host:path[@ref] — procura @ apenasss na parte do path
+            _path_part="${_input#*:}"
+            case "$_path_part" in
+                *@*)
+                    _req_ref="${_path_part##*@}"
+                    _req_url="${_input%@"$_req_ref"}"
+                    ;;
+                *)
+                    _req_url="$_input"
+                    _req_ref=""
+                    ;;
+            esac
+            ;;
+        *://*)
+            # HTTPS/HTTP: procura @ no path (após o hosst)
+            _no_scheme="${_input#*://}"
+            _path_part="${_no_scheme#*/}"
+            case "$_path_part" in
+                *@*)
+                    _req_ref="${_input##*@}"
+                    _req_url="${_input%@"$_req_ref"}"
+                    ;;
+                *)
+                    _req_url="$_input"
+                    _req_ref=""
+                    ;;
+            esac
+            ;;
+        *)
+            # Path local ou outro formato
+            case "$_input" in
+                *@*)
+                    _req_ref="${_input##*@}"
+                    _req_url="${_input%@"$_req_ref"}"
+                    ;;
+                *)
+                    _req_url="$_input"
+                    _req_ref=""
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_require() {
+    if [ -z "$1" ]; then
+        printf '%s: require requer uma URL git\n' "$SELF" >&2
+        printf 'Uso: %s require <url>[@ref]\n' "$SELF" >&2
+        exit 1
+    fi
+
+    _parse_require_arg "$1"
+    url="$_req_url"
+    ref="$_req_ref"
+    name="$(basename "$url" .git)"
+    target="$SSS_MODULES/$name"
+
+    if [ -d "$target" ]; then
+        # Módulo já essstá inssstalado - verificar se a constraint mudou
+        if [ -n "$ref" ]; then
+            git -C "$target" fetch -q
+            _detect_ref_type "$target" "$ref"
+            ctype="$_ref_type"
+        else
+            ref="$(git -C "$target" rev-parse --abbrev-ref HEAD)"
+            ctype="branch"
+        fi
+        new_constraint="${ctype}:${ref}"
+        existing_constraint="$(grep "^$name " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $3}')"
+        if [ "$new_constraint" = "$existing_constraint" ]; then
+            printf '%s: já inssstalado com a messsma constraint, nada a fazer\n' "$name"
+            return 0
+        fi
+        printf '%s: atualizando constraint %s → %s\n' "$name" "$existing_constraint" "$new_constraint"
+        git -C "$target" checkout -q "$ref"
+        resolved="$(git -C "$target" rev-parse HEAD)"
+        _lockfile_set "$name" "$url" "$new_constraint" "$resolved"
+        return 0
+    fi
+
+    printf 'Inssstalando %s...\n' "$name"
+    git clone -q "$url" "$target"
+
+    if [ -n "$ref" ]; then
+        _detect_ref_type "$target" "$ref"
+        ctype="$_ref_type"
+        git -C "$target" checkout -q "$ref"
+    else
+        ref="$(git -C "$target" rev-parse --abbrev-ref HEAD)"
+        ctype="branch"
+    fi
+
+    resolved="$(git -C "$target" rev-parse HEAD)"
+    _lockfile_set "$name" "$url" "${ctype}:${ref}" "$resolved"
+    printf 'Pronto. Execute "%s %s" para usá-lo.\n' "$SELF" "$name"
+}
+
+_install() {
+    if [ ! -f "$SSS_LOCKFILE" ]; then
+        printf 'Nenhum lockfile encontrado. Use "%s require <url>" para adicionar módulossss.\n' "$SELF"
+        return 0
+    fi
+
+    count=0
+    while IFS=' ' read -r mod_name mod_url mod_constraint mod_resolved; do
+        case "$mod_name" in ''|\#*|sss) continue ;; esac
+        target="$SSS_MODULES/$mod_name"
+        ref="${mod_constraint#*:}"
+        if [ -d "$target" ]; then
+            printf '%s: já inssstalado, pulando\n' "$mod_name"
+        else
+            printf 'Inssstalando %s...\n' "$mod_name"
+            git clone -q "$mod_url" "$target"
+            git -C "$target" checkout -q "$ref"
+        fi
+        count=$((count + 1))
+    done < "$SSS_LOCKFILE"
+
+    if [ "$count" -eq 0 ]; then
+        printf 'Nenhum módulo no lockfile.\n'
+    fi
+}
+
+_update() {
+    name_filter="$1"
+
+    if [ ! -f "$SSS_LOCKFILE" ]; then
+        printf 'Nenhum lockfile encontrado.\n'
+        return 0
+    fi
+
+    updated=0
+    skipped=0
+    while IFS=' ' read -r mod_name mod_url mod_constraint mod_resolved; do
+        case "$mod_name" in ''|\#*|sss) continue ;; esac
+        [ -n "$name_filter" ] && [ "$mod_name" != "$name_filter" ] && continue
+
+        target="$SSS_MODULES/$mod_name"
+        ctype="${mod_constraint%%:*}"
+        ref="${mod_constraint#*:}"
+
+        case "$ctype" in
+            branch)
+                printf 'Atualizando %s (%s)...\n' "$mod_name" "$ref"
+                git -C "$target" pull -q
+                new_resolved="$(git -C "$target" rev-parse HEAD)"
+                _lockfile_set "$mod_name" "$mod_url" "$mod_constraint" "$new_resolved"
+                updated=$((updated + 1))
+                ;;
+            tag|commit)
+                printf '%s: fixado em %s, pulando\n' "$mod_name" "$mod_constraint"
+                skipped=$((skipped + 1))
+                ;;
+        esac
+    done < "$SSS_LOCKFILE"
+
+    if [ -n "$name_filter" ] && [ "$updated" -eq 0 ] && [ "$skipped" -eq 0 ]; then
+        printf '%s: módulo "%s" não encontrado no lockfile\n' "$SELF" "$name_filter" >&2
+        exit 1
+    elif [ -z "$name_filter" ] && [ "$updated" -eq 0 ] && [ "$skipped" -eq 0 ]; then
+        printf 'Nenhum módulo no lockfile.\n'
+    fi
+}
+
+_self_update() {
+    version="${1:-}"
+
+    if [ -z "$version" ]; then
+        # Usa versssão do lockfile
+        version="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
+        if [ -z "$version" ]; then
+            printf '%s: nenhuma versssão especificada e nenhuma no lockfile\n' "$SELF" >&2
+            printf 'Uso: %s self-update <versssão>\n' "$SELF" >&2
+            exit 1
+        fi
+    fi
+
+    url="https://raw.githubusercontent.com/snake-ink/sss/${version}/sss"
+    tmp="$(mktemp)"
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$tmp" || {
+            printf '%s: falha ao baixar versssão "%s"\n' "$SELF" "$version" >&2
+            rm -f "$tmp"
+            exit 1
+        }
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$tmp" "$url" || {
+            printf '%s: falha ao baixar versssão "%s"\n' "$SELF" "$version" >&2
+            rm -f "$tmp"
+            exit 1
+        }
+    else
+        printf '%s: curl ou wget necessssário para self-update\n' "$SELF" >&2
+        exit 1
+    fi
+
+    chmod +x "$tmp"
+    mv "$tmp" "$0"
+    printf '%s: atualizado para versssão "%s"\n' "$SELF" "$version"
+    _lockfile_set_version "$version"
+}
+
+# --- Principal ---
+
+CMD="${1:-help}"
+[ $# -gt 0 ] && shift
+
+_init "$CMD"
+
+case "$CMD" in
+    help|--help|-h)
+        _help
+        ;;
+    require)
+        _require "$@"
+        ;;
+    install)
+        _install "$@"
+        ;;
+    update)
+        _update "$@"
+        ;;
+    self-update)
+        _self_update "$@"
+        ;;
+    *)
+        # Tenta um comando do projeto no config
+        if [ -f "$SSS_CONFIG" ]; then
+            # Verifica se osss módulossss requeridosss estão inssstalados
+            requires() {
+                for _req_mod in "$@"; do
+                    if [ ! -d "$SSS_MODULES/$_req_mod" ]; then
+                        printf '%s: módulo "%s" necessssário. Execute "%s install"\n' "$SELF" "$_req_mod" "$SELF" >&2
+                        exit 1
+                    fi
+                done
+            }
+            . "$SSS_CONFIG"
+            if command -v "cmd_$CMD" >/dev/null 2>&1; then
+                "cmd_$CMD" "$@"
+                exit $?
+            fi
+        fi
+
+        # Tenta um módulo
+        module="$SSS_MODULES/$CMD/module"
+        if [ -x "$module" ]; then
+            exec "$module" "$@"
+        fi
+
+        printf '%s: comando desssconhecido "%s"\n' "$SELF" "$CMD" >&2
+        printf 'Execute "%s help" para ver osss comandosss disssponíveisss.\n' "$SELF" >&2
+        exit 1
+        ;;
+esac
