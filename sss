@@ -54,11 +54,12 @@ _help() {
             printf '\nComandosss do projeto:\n'
             printf '%s\n' "$cmds" | while IFS= read -r cmd; do
                 [ -n "$cmd" ] || continue
+                display="$(printf '%s' "$cmd" | tr '_' ' ')"
                 desc=$(grep -B1 "^cmd_${cmd} *()" "$SSS_CONFIG" | grep '^#' | sed 's/^# *//' | tail -1)
                 if [ -n "$desc" ]; then
-                    printf '  %-18s %s\n' "$cmd" "$desc"
+                    printf '  %-18s %s\n' "$display" "$desc"
                 else
-                    printf '  %s\n' "$cmd"
+                    printf '  %s\n' "$display"
                 fi
             done
         fi
