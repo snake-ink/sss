@@ -3,55 +3,168 @@
 # https://github.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="0.1.2"
+SSS_VERSION="0.2.0"
+SSS_LANG="${SSS_LANG:-pt}"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
 SSS_MODULES="$SSS_DIR/modules"
 SSS_LOCKFILE="$SSS_DIR/modules.lock"
+SSS_ENV="${SSS_ENV:-.env}"
+
+_t() {
+    key="$1"
+    shift
+    case "$SSS_LANG" in
+        en)
+            case "$key" in
+                git_not_found) printf '%s: git not found. Install git to continue.\n' "$@" ;;
+                initialized) printf '%s: initialized %s/\n' "$@" ;;
+                version_mismatch) printf '%s: version "%s" required, running "%s"\n' "$@" ;;
+                run_self_update) printf 'Run "%s self-update" to update.\n' "$@" ;;
+                usage) printf 'Usage: %s <command> [arguments...]\n\n' "$@" ;;
+                internal_cmds) printf 'Internal commands:\n' ;;
+                help_desc) printf '  help                  Shows this help\n' ;;
+                require_desc) printf '  require <url>[@ref]   Adds a module to the lockfile and installs it\n' ;;
+                install_desc) printf '  install               Installs modules from the lockfile\n' ;;
+                update_desc) printf '  update [name]         Updates modules with branch constraint\n' ;;
+                pin_desc) printf '  pin <version>         Registers the required version in the lockfile\n' ;;
+                self_update_desc) printf '  self-update [version] Updates %s itself\n' "$@" ;;
+                project_cmds) printf 'Project commands:\n' ;;
+                modules) printf 'Modules:\n' ;;
+                require_usage) printf '%s: require needs a git URL or local path\nUsage: %s require [--local] <url>[@ref] | <path>\n' "$@" ;;
+                require_no_arg) printf '%s: require needs a git URL or local path\n' "$@" ;;
+                already_installed_same) printf '%s: already installed with the same constraint, nothing to do\n' "$@" ;;
+                updating_constraint) printf '%s: updating constraint %s -> %s\n' "$@" ;;
+                installing) printf 'Installing %s...\n' "$@" ;;
+                install_done) printf 'Done. Run "%s %s" to use it.\n' "$@" ;;
+                no_lockfile) printf 'No lockfile found. Use "%s require <url>" to add modules.\n' "$@" ;;
+                already_installed_skip) printf '%s: already installed, skipping\n' "$@" ;;
+                no_modules_lockfile) printf 'No modules in the lockfile.\n' ;;
+                updating) printf 'Updating %s (%s)...\n' "$@" ;;
+                pinned_skip) printf '%s: pinned to %s, skipping\n' "$@" ;;
+                module_not_found_lockfile) printf '%s: module "%s" not found in the lockfile\n' "$@" ;;
+                pin_usage) printf '%s: pin needs a version\n' "$@" ;;
+                pin_usage_full) printf 'Usage: %s pin <version>\n' "$@" ;;
+                pinned_version) printf '%s: version "%s" registered in the lockfile\n' "$@" ;;
+                self_update_no_version) printf '%s: no version specified and none in the lockfile\n' "$@" ;;
+                self_update_usage) printf 'Usage: %s self-update <version>\n' "$@" ;;
+                download_failed) printf '%s: failed to download version "%s"\n' "$@" ;;
+                curl_wget_required) printf '%s: curl or wget required for self-update\n' "$@" ;;
+                updated_to_version) printf '%s: updated to version "%s"\n' "$@" ;;
+                unknown_cmd) printf '%s: unknown command "%s"\n' "$@" ;;
+                run_help) printf 'Run "%s help" to see available commands.\n' "$@" ;;
+                module_required) printf '%s: module "%s" required. Run "%s install"\n' "$@" ;;
+                local_not_dir) printf '%s: path "%s" is not a directory\n' "$@" ;;
+                local_no_module) printf '%s: directory "%s" does not contain a "module" executable\n' "$@" ;;
+                local_registered) printf '%s: local module registered\n' "$@" ;;
+                local_verified) printf '%s: local module verified\n' "$@" ;;
+                local_not_found) printf '%s: local module not found at %s\n' "$@" ;;
+                local_skip) printf '%s: local module, skipping\n' "$@" ;;
+            esac
+            ;;
+        pt|*)
+            case "$key" in
+                git_not_found) printf '%s: git não encontrado. Instale o git para continuar.\n' "$@" ;;
+                initialized) printf '%s: inicializado %s/\n' "$@" ;;
+                version_mismatch) printf '%s: versão "%s" requerida, rodando "%s"\n' "$@" ;;
+                run_self_update) printf 'Execute "%s self-update" para atualizar.\n' "$@" ;;
+                usage) printf 'Uso: %s <comando> [argumentos...]\n\n' "$@" ;;
+                internal_cmds) printf 'Comandos internos:\n' ;;
+                help_desc) printf '  help                  Exibe esta ajuda\n' ;;
+                require_desc) printf '  require <url>[@ref]   Adiciona um módulo ao lockfile e instala\n' ;;
+                install_desc) printf '  install               Instala os módulos do lockfile\n' ;;
+                update_desc) printf '  update [nome]         Atualiza módulos com constraint de branch\n' ;;
+                pin_desc) printf '  pin <versão>         Registra a versão requerida no lockfile\n' ;;
+                self_update_desc) printf '  self-update [versão] Atualiza o próprio %s\n' "$@" ;;
+                project_cmds) printf 'Comandos do projeto:\n' ;;
+                modules) printf 'Módulos:\n' ;;
+                require_usage) printf '%s: require requer uma URL git ou caminho local\nUso: %s require [--local] <url>[@ref] | <caminho>\n' "$@" ;;
+                require_no_arg) printf '%s: require requer uma URL git ou caminho local\n' "$@" ;;
+                already_installed_same) printf '%s: já instalado com a mesma constraint, nada a fazer\n' "$@" ;;
+                updating_constraint) printf '%s: atualizando constraint %s → %s\n' "$@" ;;
+                installing) printf 'Instalando %s...\n' "$@" ;;
+                install_done) printf 'Pronto. Execute "%s %s" para usá-lo.\n' "$@" ;;
+                no_lockfile) printf 'Nenhum lockfile encontrado. Use "%s require <url>" para adicionar módulos.\n' "$@" ;;
+                already_installed_skip) printf '%s: já instalado, pulando\n' "$@" ;;
+                no_modules_lockfile) printf 'Nenhum módulo no lockfile.\n' ;;
+                updating) printf 'Atualizando %s (%s)...\n' "$@" ;;
+                pinned_skip) printf '%s: fixado em %s, pulando\n' "$@" ;;
+                module_not_found_lockfile) printf '%s: módulo "%s" não encontrado no lockfile\n' "$@" ;;
+                pin_usage) printf '%s: pin requer uma versão\n' "$@" ;;
+                pin_usage_full) printf 'Uso: %s pin <versão>\n' "$@" ;;
+                pinned_version) printf '%s: versão "%s" registrada no lockfile\n' "$@" ;;
+                self_update_no_version) printf '%s: nenhuma versão especificada e nenhuma no lockfile\n' "$@" ;;
+                self_update_usage) printf 'Uso: %s self-update <versão>\n' "$@" ;;
+                download_failed) printf '%s: falha ao baixar versão "%s"\n' "$@" ;;
+                curl_wget_required) printf '%s: curl ou wget necessário para self-update\n' "$@" ;;
+                updated_to_version) printf '%s: atualizado para versão "%s"\n' "$@" ;;
+                unknown_cmd) printf '%s: comando desconhecido "%s"\n' "$@" ;;
+                run_help) printf 'Execute "%s help" para ver osss comandos disponíveis.\n' "$@" ;;
+                module_required) printf '%s: módulo "%s" necessário. Execute "%s install"\n' "$@" ;;
+                local_not_dir) printf '%s: caminho "%s" não é um diretório\n' "$@" ;;
+                local_no_module) printf '%s: diretório "%s" não contém um executável "module"\n' "$@" ;;
+                local_registered) printf '%s: módulo local registrado\n' "$@" ;;
+                local_verified) printf '%s: módulo local verificado\n' "$@" ;;
+                local_not_found) printf '%s: módulo local não encontrado em %s\n' "$@" ;;
+                local_skip) printf '%s: módulo local, pulando\n' "$@" ;;
+            esac
+            ;;
+    esac
+}
+
+_load_env() {
+    if [ -f "$SSS_ENV" ]; then
+        case "$SSS_ENV" in
+            /*|./*) . "$SSS_ENV" ;;
+            *) . "./$SSS_ENV" ;;
+        esac
+    fi
+}
 
 # Auto-inicializa .sss/ se essstiver em um repositório git
 _init() {
     _cmd="$1"
     [ -d ".git" ] || return 0
     if ! command -v git >/dev/null 2>&1; then
-        printf '%s: git não encontrado. Inssstale o git para continuar.\n' "$SELF" >&2
+        _t git_not_found "$SELF" >&2
         exit 1
     fi
     if [ ! -d "$SSS_DIR" ]; then
         mkdir -p "$SSS_MODULES"
         touch "$SSS_CONFIG"
-        printf '%s: inicializado %s/\n' "$SELF" "$SSS_DIR" >&2
+        _t initialized "$SELF" "$SSS_DIR" >&2
     fi
-    if [ -f ".gitignore" ] && ! grep -qx ".sss/modules/" .gitignore 2>/dev/null; then
-        printf '\n.sss/modules/\n' >> .gitignore
+    if [ -f ".gitignore" ] && ! grep -qx ".sss/modules/\*" .gitignore 2>/dev/null; then
+        printf '\n.sss/modules/*\n' >> .gitignore
     fi
 
-    # Verifica versssão requerida no lockfile (pula durante self-update)
+    # Verifica versão requerida no lockfile (pula durante self-update)
     [ "$_cmd" = "self-update" ] || [ "$_cmd" = "pin" ] && return 0
     if [ -f "$SSS_LOCKFILE" ]; then
         _required="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
         if [ -n "$_required" ] && [ "$_required" != "$SSS_VERSION" ]; then
-            printf '%s: versssão "%s" requerida, rodando "%s"\n' "$SELF" "$_required" "$SSS_VERSION" >&2
-            printf 'Execute "%s self-update" para atualizar.\n' "$SELF" >&2
+            _t version_mismatch "$SELF" "$_required" "$SSS_VERSION" >&2
+            _t run_self_update "$SELF" >&2
             exit 1
         fi
     fi
 }
 
 _help() {
-    printf 'Uso: %s <comando> [argumentosss...]\n\n' "$SELF"
-    printf 'Comandosss internosss:\n'
-    printf '  help                  Exibe esssta ajuda\n'
-    printf '  require <url>[@ref]   Adiciona um módulo ao lockfile e inssstala\n'
-    printf '  install               Inssstala osss módulossss do lockfile\n'
-    printf '  update [nome]         Atualiza módulossss com constraint de branch\n'
-    printf '  pin <versssão>         Registra a versssão requerida no lockfile\n'
-    printf '  self-update [versssão] Atualiza o próprio %s\n' "$SELF"
+    _t usage "$SELF"
+    _t internal_cmds
+    _t help_desc
+    _t require_desc
+    _t install_desc
+    _t update_desc
+    _t pin_desc
+    _t self_update_desc "$SELF"
 
     if [ -f "$SSS_CONFIG" ]; then
         cmds=$(grep -E '^cmd_[a-zA-Z0-9_]+ *\(\)' "$SSS_CONFIG" | sed 's/^cmd_\([a-zA-Z0-9_]*\).*/\1/')
         if [ -n "$cmds" ]; then
-            printf '\nComandosss do projeto:\n'
+            printf '\n'
+            _t project_cmds
             printf '%s\n' "$cmds" | while IFS= read -r cmd; do
                 [ -n "$cmd" ] || continue
                 display="$(printf '%s' "$cmd" | tr '_' ' ')"
@@ -71,7 +184,8 @@ _help() {
             [ -d "$d" ] && mods="${mods}$(basename "$d")\n"
         done
         if [ -n "$mods" ]; then
-            printf '\nMódulossss:\n'
+            printf '\n'
+            _t modules
             printf "$mods" | while IFS= read -r mod; do
                 [ -n "$mod" ] && printf '  %s\n' "$mod"
             done
@@ -88,7 +202,7 @@ _lockfile_set() {
     mv "$tmp" "$SSS_LOCKFILE"
 }
 
-# Atualiza ou adiciona a entrada de versssão do próprio sss no lockfile (2 campos)
+# Atualiza ou adiciona a entrada de versão do próprio sss no lockfile (2 campos)
 _lockfile_set_version() {
     _version="$1"
     tmp="$(mktemp)"
@@ -158,10 +272,51 @@ _parse_require_arg() {
     esac
 }
 
+_add_local_module() {
+    path="$1"
+    name="$(basename "$path" .git)"
+
+    if [ ! -d "$path" ]; then
+        _t local_not_dir "$SELF" "$path" >&2
+        exit 1
+    fi
+
+    if [ ! -f "$path/module" ] && [ ! -x "$path/module" ]; then
+        _t local_no_module "$SELF" "$path" >&2
+        exit 1
+    fi
+
+    if [ -f "$path/module" ] && [ ! -x "$path/module" ]; then
+        chmod +x "$path/module"
+    fi
+
+    case "$path" in
+        "$SSS_MODULES/"*|".sss/modules/"*)
+            if [ -f ".gitignore" ]; then
+                if ! grep -qx "!.sss/modules/$name/" .gitignore 2>/dev/null; then
+                    printf '!.sss/modules/%s/\n' "$name" >> .gitignore
+                fi
+            fi
+            ;;
+    esac
+
+    _lockfile_set "$name" "$path" "local" "-"
+    _t local_registered "$name"
+}
+
 _require() {
+    if [ "$1" = "--local" ]; then
+        shift
+        if [ -z "$1" ]; then
+            _t require_usage "$SELF" "$SELF" >&2
+            exit 1
+        fi
+        _add_local_module "$1"
+        return $?
+    fi
+
     if [ -z "$1" ]; then
-        printf '%s: require requer uma URL git\n' "$SELF" >&2
-        printf 'Uso: %s require <url>[@ref]\n' "$SELF" >&2
+        _t require_usage "$SELF" "$SELF" >&2
         exit 1
     fi
 
@@ -184,17 +339,17 @@ _require() {
         new_constraint="${ctype}:${ref}"
         existing_constraint="$(grep "^$name " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $3}')"
         if [ "$new_constraint" = "$existing_constraint" ]; then
-            printf '%s: já inssstalado com a messsma constraint, nada a fazer\n' "$name"
+            _t already_installed_same "$name"
             return 0
         fi
-        printf '%s: atualizando constraint %s → %s\n' "$name" "$existing_constraint" "$new_constraint"
+        _t updating_constraint "$name" "$existing_constraint" "$new_constraint"
         git -C "$target" checkout -q "$ref"
         resolved="$(git -C "$target" rev-parse HEAD)"
         _lockfile_set "$name" "$url" "$new_constraint" "$resolved"
         return 0
     fi
 
-    printf 'Inssstalando %s...\n' "$name"
+    _t installing "$name"
     git clone -q "$url" "$target"
 
     if [ -n "$ref" ]; then
@@ -208,12 +363,12 @@ _require() {
 
     resolved="$(git -C "$target" rev-parse HEAD)"
     _lockfile_set "$name" "$url" "${ctype}:${ref}" "$resolved"
-    printf 'Pronto. Execute "%s %s" para usá-lo.\n' "$SELF" "$name"
+    _t install_done "$SELF" "$name"
 }
 
 _install() {
     if [ ! -f "$SSS_LOCKFILE" ]; then
-        printf 'Nenhum lockfile encontrado. Use "%s require <url>" para adicionar módulossss.\n' "$SELF"
+        _t no_lockfile "$SELF"
         return 0
     fi
 
@@ -221,19 +376,31 @@ _install() {
     while IFS=' ' read -r mod_name mod_url mod_constraint mod_resolved; do
         case "$mod_name" in ''|\#*|sss) continue ;; esac
         target="$SSS_MODULES/$mod_name"
+        ctype="${mod_constraint%%:*}"
         ref="${mod_constraint#*:}"
-        if [ -d "$target" ]; then
-            printf '%s: já inssstalado, pulando\n' "$mod_name"
-        else
-            printf 'Inssstalando %s...\n' "$mod_name"
-            git clone -q "$mod_url" "$target"
-            git -C "$target" checkout -q "$ref"
-        fi
+        case "$ctype" in
+            local)
+                if [ ! -d "$mod_url" ]; then
+                    _t local_not_found "$mod_name" "$mod_url" >&2
+                    exit 1
+                fi
+                _t local_verified "$mod_name"
+                ;;
+            *)
+                if [ -d "$target" ]; then
+                    _t already_installed_skip "$mod_name"
+                else
+                    _t installing "$mod_name"
+                    git clone -q "$mod_url" "$target"
+                    git -C "$target" checkout -q "$ref"
+                fi
+                ;;
+        esac
         count=$((count + 1))
     done < "$SSS_LOCKFILE"
 
     if [ "$count" -eq 0 ]; then
-        printf 'Nenhum módulo no lockfile.\n'
+        _t no_modules_lockfile
     fi
 }
 
@@ -241,7 +408,7 @@ _update() {
     name_filter="$1"
 
     if [ ! -f "$SSS_LOCKFILE" ]; then
-        printf 'Nenhum lockfile encontrado.\n'
+        _t no_lockfile
         return 0
     fi
 
@@ -257,47 +424,51 @@ _update() {
 
         case "$ctype" in
             branch)
-                printf 'Atualizando %s (%s)...\n' "$mod_name" "$ref"
+                _t updating "$mod_name" "$ref"
                 git -C "$target" pull -q
                 new_resolved="$(git -C "$target" rev-parse HEAD)"
                 _lockfile_set "$mod_name" "$mod_url" "$mod_constraint" "$new_resolved"
                 updated=$((updated + 1))
                 ;;
+            local)
+                _t local_skip "$mod_name"
+                skipped=$((skipped + 1))
+                ;;
             tag|commit)
-                printf '%s: fixado em %s, pulando\n' "$mod_name" "$mod_constraint"
+                _t pinned_skip "$mod_name" "$mod_constraint"
                 skipped=$((skipped + 1))
                 ;;
         esac
     done < "$SSS_LOCKFILE"
 
     if [ -n "$name_filter" ] && [ "$updated" -eq 0 ] && [ "$skipped" -eq 0 ]; then
-        printf '%s: módulo "%s" não encontrado no lockfile\n' "$SELF" "$name_filter" >&2
+        _t module_not_found_lockfile "$SELF" "$name_filter" >&2
         exit 1
     elif [ -z "$name_filter" ] && [ "$updated" -eq 0 ] && [ "$skipped" -eq 0 ]; then
-        printf 'Nenhum módulo no lockfile.\n'
+        _t no_modules_lockfile
     fi
 }
 
 _pin() {
     version="${1:-}"
     if [ -z "$version" ]; then
-        printf '%s: pin requer uma versssão\n' "$SELF" >&2
-        printf 'Uso: %s pin <versssão>\n' "$SELF" >&2
+        _t pin_usage "$SELF" >&2
+        _t pin_usage_full "$SELF" >&2
         exit 1
     fi
     _lockfile_set_version "$version"
-    printf '%s: versssão "%s" registrada no lockfile\n' "$SELF" "$version"
+    _t pinned_version "$SELF" "$version"
 }
 
 _self_update() {
     version="${1:-}"
 
     if [ -z "$version" ]; then
-        # Usa versssão do lockfile
+        # Usa versão do lockfile
         version="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
         if [ -z "$version" ]; then
-            printf '%s: nenhuma versssão especificada e nenhuma no lockfile\n' "$SELF" >&2
-            printf 'Uso: %s self-update <versssão>\n' "$SELF" >&2
+            _t self_update_no_version "$SELF" >&2
+            _t self_update_usage "$SELF" >&2
             exit 1
         fi
     fi
@@ -307,24 +478,24 @@ _self_update() {
 
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL "$url" -o "$tmp" || {
-            printf '%s: falha ao baixar versssão "%s"\n' "$SELF" "$version" >&2
+            _t download_failed "$SELF" "$version" >&2
             rm -f "$tmp"
             exit 1
         }
     elif command -v wget >/dev/null 2>&1; then
         wget -qO "$tmp" "$url" || {
-            printf '%s: falha ao baixar versssão "%s"\n' "$SELF" "$version" >&2
+            _t download_failed "$SELF" "$version" >&2
             rm -f "$tmp"
             exit 1
         }
     else
-        printf '%s: curl ou wget necessssário para self-update\n' "$SELF" >&2
+        _t curl_wget_required "$SELF" >&2
         exit 1
     fi
 
     chmod +x "$tmp"
     mv "$tmp" "$0"
-    printf '%s: atualizado para versssão "%s"\n' "$SELF" "$version"
+    _t updated_to_version "$SELF" "$version"
     _lockfile_set_version "$version"
 }
 
@@ -334,6 +505,14 @@ CMD="${1:-help}"
 [ $# -gt 0 ] && shift
 
 _init "$CMD"
+
+# Carrega .env cedo para permitir override de SSS_* antes do dispatch
+_load_env
+SSS_LANG="${SSS_LANG:-pt}"
+# Se .env redefiniu SSS_ENV para outro arquivo, carrega também
+if [ -n "$SSS_ENV" ] && [ "$SSS_ENV" != ".env" ]; then
+    _load_env
+fi
 
 case "$CMD" in
     help|--help|-h)
@@ -360,8 +539,17 @@ case "$CMD" in
             # Verifica se osss módulossss requeridosss estão inssstalados
             requires() {
                 for _req_mod in "$@"; do
-                    if [ ! -d "$SSS_MODULES/$_req_mod" ]; then
-                        printf '%s: módulo "%s" necessssário. Execute "%s install"\n' "$SELF" "$_req_mod" "$SELF" >&2
+                    _mod_found=0
+                    if [ -d "$SSS_MODULES/$_req_mod" ]; then
+                        _mod_found=1
+                    elif [ -f "$SSS_LOCKFILE" ]; then
+                        _local_path="$(grep "^$_req_mod " "$SSS_LOCKFILE" 2>/dev/null | awk '$3 == "local" {print $2}')"
+                        if [ -n "$_local_path" ] && [ -d "$_local_path" ]; then
+                            _mod_found=1
+                        fi
+                    fi
+                    if [ "$_mod_found" -eq 0 ]; then
+                        _t module_required "$SELF" "$_req_mod" "$SELF" >&2
                         exit 1
                     fi
                 done
@@ -396,8 +584,16 @@ case "$CMD" in
             exec "$module" "$@"
         fi
 
-        printf '%s: comando desssconhecido "%s"\n' "$SELF" "$CMD" >&2
-        printf 'Execute "%s help" para ver osss comandosss disssponíveisss.\n' "$SELF" >&2
+        # Tenta módulo local do lockfile
+        if [ -f "$SSS_LOCKFILE" ]; then
+            local_path="$(grep "^$CMD " "$SSS_LOCKFILE" 2>/dev/null | awk '$3 == "local" {print $2}')"
+            if [ -n "$local_path" ] && [ -x "$local_path/module" ]; then
+                exec "$local_path/module" "$@"
+            fi
+        fi
+
+        _t unknown_cmd "$SELF" "$CMD" >&2
+        _t run_help "$SELF" >&2
         exit 1
         ;;
 esac

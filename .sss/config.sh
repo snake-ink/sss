@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Roda os tessstesss
+# Roda os testes
 cmd_test() {
     ./test/bats/bin/bats test/
 }

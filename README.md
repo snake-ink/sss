@@ -14,7 +14,31 @@ chmod +x sss
 
 Na primeira execução, o `sss` inicializa a pasta `.sss/` e adiciona `.sss/modules/` ao `.gitignore` automaticamente.
 
-## Comandosss do Projeto
+## Variáveis de Ambiente
+
+Crie o arquivo `.env` na raiz do projeto para definir variáveis disponíveis em `config.sh` e dentro de todos os módulos:
+
+```sh
+# .env
+export APP_NAME=meu-app
+export DATABASE_URL=postgres://localhost/meubanco
+```
+
+O arquivo é carregado automaticamente antes de qualquer comando ser executado — inclusive comandos internos como `help` e `install`. Isso significa que você também pode controlar o comportamento do `sss` pelo próprio `.env`:
+
+```sh
+# .env
+export SSS_LANG=en
+export SSS_ENV=.env.local
+```
+
+Para usar um caminho diferente sem depender do `.env`:
+
+```sh
+SSS_ENV=.env.local ./sss start
+```
+
+## Comandos do Projeto
 
 Defina comandos no arquivo `.sss/config.sh` (versssionado junto com o projeto):
 
@@ -46,7 +70,7 @@ Execute com:
 
 Sssub-comandosss com essspaço usssam longest-match: `./sss docker build prod` chama `cmd_docker_build "prod"`.
 
-Use `requires` dentro de um comando para garantir que módulosss necessssários essstejam inssstalados:
+Use `requires` dentro de um comando para garantir que módulos necessários estejam instalados:
 
 ```sh
 cmd_deploy() {
@@ -55,9 +79,9 @@ cmd_deploy() {
 }
 ```
 
-## Módulosss
+## Módulos
 
-Módulosss são extensssões inssstaladasss localmente via git. Podem ser escritosss em qualquer linguagem.
+Módulos são extensões instaladas localmente via git. Podem ser escritos em qualquer linguagem.
 
 Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ser uma branch, tag ou commit:
 
@@ -68,37 +92,59 @@ Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ser uma bran
 ./sss require https://github.com/snake-ink/sss-docker@a3f91c2  # commit
 ```
 
-O módulo é inssstalado em `.sss/modules/` (gitignored) e regissstrado em `.sss/modules.lock` (versionado). Para ressstaurar os módulosss em outra máquina:
+O módulo é instalado em `.sss/modules/` (gitignored) e registrado em `.sss/modules.lock` (versionado). Para restaurar os módulos em outra máquina:
 
 ```sh
 ./sss install
 ```
 
-Para atualizar módulosss fixados em uma branch:
+Para atualizar módulos fixados em uma branch:
 
 ```sh
 ./sss update            # atualiza todos os de branch
 ./sss update sss-docker # atualiza um específico
 ```
 
-Módulosss fixados em tag ou commit são ignoradosss pelo `update`. Use `require` novamente com o novo ref para mudá-losss.
+Módulos fixados em tag ou commit são ignorados pelo `update`. Use `require` novamente com o novo ref para mudá-los.
+
+### Módulos Locais
+
+Para módulos que já fazem parte do repositório (commitados no git), use `--local`:
+
+```sh
+./sss require --local ./scripts/meu-modulo
+```
+
+O lockfile registrará o caminho local. O `sss` não clona nem atualiza esse módulo — apenas o verifica. Isso é útil para scripts internos que você quer tratar como módulos.
+
+Se o módulo local estiver dentro de `.sss/modules/`, o `sss` adiciona uma exceção no `.gitignore` para que ele seja versionado.
+
+## Internacionalização
+
+O idioma das mensagens é controlado pela variável de ambiente `SSS_LANG`:
+
+```sh
+SSS_LANG=en ./sss help    # inglês
+SSS_LANG=pt ./sss help    # português (padrão)
+```
 
 ## Renomeando
 
-O `sss` é apenas um arquivo: renomeie-o como quiser. O nome aparece corretamente em todosss os outputsss:
+O `sss` é apenas um arquivo: renomeie-o como quiser. O nome aparece corretamente em todos os outputs:
 
 ```sh
 cp sss meu-projeto
 ./meu-projeto help
 ```
 
-## Comandosss Internosss
+## Comandos Internos
 
-| Comando | Dessscrição |
+| Comando | Descrição |
 |---------|-----------|
-| `help` | Lisssta os comandosss disponíveis |
-| `require <url>[@ref]` | Adiciona um módulo ao lockfile e inssstala |
-| `install` | Restaura todosss osss módulosss do lockfile |
-| `update [nome]` | Atualiza módulosss com constraint de branch |
-| `pin <versssão>` | Registra a versssão requerida do sss no lockfile |
-| `self-update [versssão]` | Atualiza o próprio sss |
+| `help` | Lista os comandos disponíveis |
+| `require <url>[@ref]` | Adiciona um módulo remoto ao lockfile e instala |
+| `require --local <caminho>` | Registra um módulo local no lockfile |
+| `install` | Restaura todos os módulos do lockfile |
+| `update [nome]` | Atualiza módulos com constraint de branch |
+| `pin <versão>` | Registra a versão requerida do sss no lockfile |
+| `self-update [versão]` | Atualiza o próprio sss |

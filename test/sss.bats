@@ -56,13 +56,13 @@ _make_fake_remote() {
 @test "auto-init adiciona .sss/modules/ em .gitignore" {
     touch .gitignore
     run ./sss help
-    grep -qx ".sss/modules/" .gitignore
+    grep -qFx ".sss/modules/*" .gitignore
 }
 
 @test "auto-init não duplica entradasss em .gitignore" {
-    printf '.sss/modules/\n' > .gitignore
+    printf '.sss/modules/*\n' > .gitignore
     run ./sss help
-    [ "$(grep -c "^.sss/modules/" .gitignore)" -eq 1 ]
+    [ "$(grep -c "^.sss/modules/\*" .gitignore)" -eq 1 ]
 }
 
 @test "auto-init é pulado quando não essstá em um repo git" {
@@ -77,7 +77,7 @@ _make_fake_remote() {
 @test "comando desssconhecido retorna erro" {
     run ./sss unknown
     [ "$status" -eq 1 ]
-    [[ "$output" == *"comando desssconhecido"* ]]
+    [[ "$output" == *"comando desconhecido"* ]]
 }
 
 # --- Config dispatch ---
@@ -401,7 +401,7 @@ EOF
 @test "self-update ssem versssão e ssem lockfile sai com erro" {
     run ./sss self-update
     [ "$status" -eq 1 ]
-    [[ "$output" == *"nenhuma versssão"* ]]
+    [[ "$output" == *"nenhuma versão"* ]]
 }
 
 @test "install pula entrada sss no lockfile" {
@@ -457,6 +457,152 @@ EOF
     run env PATH="" ./sss help
     [ "$status" -eq 1 ]
     [[ "$output" == *"git"* ]]
+}
+
+# --- Local modules ---
+
+@test "require --local registra módulo local no lockfile" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nprintf "local\n"\n' > localmod/module
+    chmod +x localmod/module
+    run ./sss require --local ./localmod
+    [ "$status" -eq 0 ]
+    grep -q "^localmod ./localmod local -$" .sss/modules.lock
+}
+
+@test "despacha para módulo local" {
+    mkdir -p localmod
+    cat > localmod/module << 'EOF'
+#!/bin/sh
+printf "from local: %s\n" "$1"
+EOF
+    chmod +x localmod/module
+    ./sss require --local ./localmod > /dev/null
+    run ./sss localmod hello
+    [ "$status" -eq 0 ]
+    [ "$output" = "from local: hello" ]
+}
+
+@test "install verifica módulo local" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nexit 0\n' > localmod/module
+    chmod +x localmod/module
+    mkdir -p .sss
+    printf 'localmod ./localmod local -\n' > .sss/modules.lock
+    run ./sss install
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"verificado"* ]]
+}
+
+@test "install falha quando módulo local não existe" {
+    mkdir -p .sss/modules
+    printf 'localmod ./missing local -\n' > .sss/modules.lock
+    run ./sss install
+    [ "$status" -eq 1 ]
+}
+
+@test "update pula módulo local" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nexit 0\n' > localmod/module
+    chmod +x localmod/module
+    mkdir -p .sss
+    printf 'localmod ./localmod local -\n' > .sss/modules.lock
+    run ./sss update
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"local"* ]]
+    [[ "$output" == *"pulando"* ]]
+}
+
+@test "requires funciona para módulo local" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nexit 0\n' > localmod/module
+    chmod +x localmod/module
+    mkdir -p .sss
+    printf 'localmod ./localmod local -\n' > .sss/modules.lock
+    cat > .sss/config.sh << 'EOF'
+cmd_go() {
+    requires localmod
+    printf "ok\n"
+}
+EOF
+    run ./sss go
+    [ "$status" -eq 0 ]
+    [ "$output" = "ok" ]
+}
+
+@test "requires falha quando módulo local está faltando" {
+    mkdir -p .sss
+    printf 'localmod ./missing local -\n' > .sss/modules.lock
+    cat > .sss/config.sh << 'EOF'
+cmd_go() {
+    requires localmod
+    printf "ok\n"
+}
+EOF
+    run ./sss go
+    [ "$status" -eq 1 ]
+}
+
+# --- Environment variables ---
+
+@test "env vars disponíveis em config.sh" {
+    mkdir -p .sss
+    printf 'export MY_VAR=hello\n' > .env
+    cat > .sss/config.sh << 'EOF'
+cmd_env_test() {
+    printf "%s\n" "$MY_VAR"
+}
+EOF
+    run ./sss env_test
+    [ "$status" -eq 0 ]
+    [ "$output" = "hello" ]
+}
+
+@test "env vars disponíveis em módulo" {
+    mkdir -p .sss/modules/envmod
+    printf '#!/bin/sh\nprintf "%%s\\n" "$MY_VAR"\n' > .sss/modules/envmod/module
+    chmod +x .sss/modules/envmod/module
+    printf 'export MY_VAR=from_module\n' > .env
+    run ./sss envmod
+    [ "$status" -eq 0 ]
+    [ "$output" = "from_module" ]
+}
+
+# --- i18n ---
+
+@test "help em inglês" {
+    run env SSS_LANG=en ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+    [[ "$output" == *"Internal commands:"* ]]
+    [[ "$output" == *"Shows this help"* ]]
+}
+
+@test "erro de comando desconhecido em inglês" {
+    run env SSS_LANG=en ./sss unknown
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"unknown command"* ]]
+}
+
+@test "SSS_LANG pode vir do .env" {
+    printf 'export SSS_LANG=en\n' > .env
+    run ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "SSS_ENV pode redirecionar para outro arquivo via .env" {
+    printf 'export SSS_ENV=.env.local\n' > .env
+    printf 'export LOCAL_VAR=ok\n' > .env.local
+    mkdir -p .sss
+    cat > .sss/config.sh << 'EOF'
+cmd_check() {
+    printf "%s\n" "$LOCAL_VAR"
+}
+EOF
+    run ./sss check
+    [ "$status" -eq 0 ]
+    [ "$output" = "ok" ]
 }
 
 # --- Renameable ---

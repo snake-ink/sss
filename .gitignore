@@ -1,2 +1,5 @@
 .sss/modules/
 .claude/
+
+.sss/modules/*
+.env*
