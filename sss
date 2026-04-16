@@ -3,7 +3,7 @@
 # https://github.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="0.2.0"
+SSS_VERSION="v0.2.1"
 SSS_LANG="${SSS_LANG:-pt}"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
@@ -121,6 +121,11 @@ _load_env() {
     fi
 }
 
+# Remove 'v' inicial para comparação tolerante
+_normalize_version() {
+    printf '%s\n' "$1" | sed 's/^v//'
+}
+
 # Auto-inicializa .sss/ se essstiver em um repositório git
 _init() {
     _cmd="$1"
@@ -141,9 +146,11 @@ _init() {
     # Verifica versão requerida no lockfile (pula durante self-update)
     [ "$_cmd" = "self-update" ] || [ "$_cmd" = "pin" ] && return 0
     if [ -f "$SSS_LOCKFILE" ]; then
-        _required="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
-        if [ -n "$_required" ] && [ "$_required" != "$SSS_VERSION" ]; then
-            _t version_mismatch "$SELF" "$_required" "$SSS_VERSION" >&2
+        _required_raw="$(grep "^sss " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $2}')"
+        _required="$(_normalize_version "$_required_raw")"
+        _current="$(_normalize_version "$SSS_VERSION")"
+        if [ -n "$_required" ] && [ "$_required" != "$_current" ]; then
+            _t version_mismatch "$SELF" "$_required_raw" "$SSS_VERSION" >&2
             _t run_self_update "$SELF" >&2
             exit 1
         fi
@@ -456,6 +463,7 @@ _pin() {
         _t pin_usage_full "$SELF" >&2
         exit 1
     fi
+    version="$(_normalize_version "$version")"
     _lockfile_set_version "$version"
     _t pinned_version "$SELF" "$version"
 }
@@ -473,30 +481,39 @@ _self_update() {
         fi
     fi
 
-    url="https://raw.githubusercontent.com/snake-ink/sss/${version}/sss"
-    tmp="$(mktemp)"
+    version_norm="$(_normalize_version "$version")"
+    version_with_v="v${version_norm}"
+    version_without_v="${version_norm}"
 
-    if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$url" -o "$tmp" || {
-            _t download_failed "$SELF" "$version" >&2
-            rm -f "$tmp"
-            exit 1
-        }
-    elif command -v wget >/dev/null 2>&1; then
-        wget -qO "$tmp" "$url" || {
-            _t download_failed "$SELF" "$version" >&2
-            rm -f "$tmp"
-            exit 1
-        }
-    else
-        _t curl_wget_required "$SELF" >&2
+    tmp="$(mktemp)"
+    downloaded=0
+
+    _try_download() {
+        _url="https://raw.githubusercontent.com/snake-ink/sss/${1}/sss"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$_url" -o "$tmp" 2>/dev/null && return 0
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO "$tmp" "$_url" 2>/dev/null && return 0
+        fi
+        return 1
+    }
+
+    if _try_download "$version_with_v"; then
+        downloaded=1
+    elif _try_download "$version_without_v"; then
+        downloaded=1
+    fi
+
+    if [ "$downloaded" -eq 0 ]; then
+        _t download_failed "$SELF" "$version" >&2
+        rm -f "$tmp"
         exit 1
     fi
 
     chmod +x "$tmp"
     mv "$tmp" "$0"
-    _t updated_to_version "$SELF" "$version"
-    _lockfile_set_version "$version"
+    _t updated_to_version "$SELF" "$version_norm"
+    _lockfile_set_version "$version_norm"
 }
 
 # --- Principal ---
