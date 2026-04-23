@@ -92,6 +92,12 @@ Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ser uma bran
 ./sss require https://github.com/snake-ink/sss-docker@a3f91c2  # commit
 ```
 
+Use `as` para instalar com um nome diferente do repositório:
+
+```sh
+./sss require https://github.com/snake-ink/sss-docker as docker
+```
+
 O módulo é instalado em `.sss/modules/` (gitignored) e registrado em `.sss/modules.lock` (versionado). Para restaurar os módulos em outra máquina:
 
 ```sh

@@ -24,14 +24,14 @@ _t() {
                 usage) printf 'Usage: %s <command> [arguments...]\n\n' "$@" ;;
                 internal_cmds) printf 'Internal commands:\n' ;;
                 help_desc) printf '  help                  Shows this help\n' ;;
-                require_desc) printf '  require <url>[@ref]   Adds a module to the lockfile and installs it\n' ;;
+                require_desc) printf '  require <url>[@ref] [as <name>]  Adds a module to the lockfile and installs it\n' ;;
                 install_desc) printf '  install               Installs modules from the lockfile\n' ;;
                 update_desc) printf '  update [name]         Updates modules with branch constraint\n' ;;
                 pin_desc) printf '  pin <version>         Registers the required version in the lockfile\n' ;;
                 self_update_desc) printf '  self-update [version] Updates %s itself\n' "$@" ;;
                 project_cmds) printf 'Project commands:\n' ;;
                 modules) printf 'Modules:\n' ;;
-                require_usage) printf '%s: require needs a git URL or local path\nUsage: %s require [--local] <url>[@ref] | <path>\n' "$@" ;;
+                require_usage) printf '%s: require needs a git URL or local path\nUsage: %s require [--local] <url>[@ref] [as <name>] | <path>\n' "$@" ;;
                 require_no_arg) printf '%s: require needs a git URL or local path\n' "$@" ;;
                 already_installed_same) printf '%s: already installed with the same constraint, nothing to do\n' "$@" ;;
                 updating_constraint) printf '%s: updating constraint %s -> %s\n' "$@" ;;
@@ -331,6 +331,12 @@ _require() {
     url="$_req_url"
     ref="$_req_ref"
     name="$(basename "$url" .git)"
+    
+    # Support aliasing: require <url> as <name>
+    if [ "${2:-}" = "as" ] && [ -n "${3:-}" ]; then
+        name="$3"
+    fi
+    
     target="$SSS_MODULES/$name"
 
     if [ -d "$target" ]; then
