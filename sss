@@ -3,7 +3,7 @@
 # https://github.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="v0.2.2"
+SSS_VERSION="v0.2.3"
 SSS_LANG="${SSS_LANG:-pt}"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
@@ -29,6 +29,9 @@ _t() {
                 update_desc) printf '  update [name]         Updates modules with branch constraint\n' ;;
                 pin_desc) printf '  pin <version>         Registers the required version in the lockfile\n' ;;
                 self_update_desc) printf '  self-update [version] Updates %s itself\n' "$@" ;;
+                remove_desc) printf '  remove <name>          Removes a module from the lockfile and uninstalls it\n' ;;
+                removed_module) printf '%s: module "%s" removed\n' "$@" ;;
+                not_installed) printf '%s: module "%s" is not installed\n' "$@" ;;
                 project_cmds) printf 'Project commands:\n' ;;
                 modules) printf 'Modules:\n' ;;
                 require_usage) printf '%s: require needs a git URL or local path\nUsage: %s require [--local] <url>[@ref] [as <name>] | <path>\n' "$@" ;;
@@ -76,6 +79,9 @@ _t() {
                 update_desc) printf '  update [nome]         Atualiza módulos com constraint de branch\n' ;;
                 pin_desc) printf '  pin <versão>         Registra a versão requerida no lockfile\n' ;;
                 self_update_desc) printf '  self-update [versão] Atualiza o próprio %s\n' "$@" ;;
+                remove_desc) printf '  remove <nome>          Remove um módulo do lockfile e desinstala\n' ;;
+                removed_module) printf '%s: módulo "%s" removido\n' "$@" ;;
+                not_installed) printf '%s: módulo "%s" não está instalado\n' "$@" ;;
                 project_cmds) printf 'Comandos do projeto:\n' ;;
                 modules) printf 'Módulos:\n' ;;
                 require_usage) printf '%s: require requer uma URL git ou caminho local\nUso: %s require [--local] <url>[@ref] | <caminho>\n' "$@" ;;
@@ -165,6 +171,7 @@ _help() {
     _t install_desc
     _t update_desc
     _t pin_desc
+    _t remove_desc
     _t self_update_desc "$SELF"
 
     if [ -f "$SSS_CONFIG" ]; then
@@ -340,9 +347,9 @@ _require() {
     target="$SSS_MODULES/$name"
 
     if [ -d "$target" ]; then
-        # Módulo já essstá inssstalado - verificar se a constraint mudou
+        # Módulo já está instalado - verificar se a constraint mudou
         if [ -n "$ref" ]; then
-            git -C "$target" fetch -q
+            git -C "$target" fetch -q --tags
             _detect_ref_type "$target" "$ref"
             ctype="$_ref_type"
         else
@@ -356,7 +363,10 @@ _require() {
             return 0
         fi
         _t updating_constraint "$name" "$existing_constraint" "$new_constraint"
-        git -C "$target" checkout -q "$ref"
+        if ! git -C "$target" checkout -q "$ref"; then
+            printf '%s: failed to checkout "%s"\n' "$SELF" "$ref" >&2
+            exit 1
+        fi
         resolved="$(git -C "$target" rev-parse HEAD)"
         _lockfile_set "$name" "$url" "$new_constraint" "$resolved"
         return 0
@@ -522,6 +532,47 @@ _self_update() {
     _lockfile_set_version "$version_norm"
 }
 
+_remove() {
+    name="$1"
+    if [ -z "$name" ]; then
+        printf '%s: remove needs a module name\n' "$SELF" >&2
+        exit 1
+    fi
+
+    if [ ! -f "$SSS_LOCKFILE" ]; then
+        _t not_installed "$SELF" "$name" >&2
+        exit 1
+    fi
+
+    # Check if module is in lockfile
+    entry="$(grep "^$name " "$SSS_LOCKFILE" 2>/dev/null)"
+    if [ -z "$entry" ]; then
+        _t not_installed "$SELF" "$name" >&2
+        exit 1
+    fi
+
+    target="$SSS_MODULES/$name"
+    ctype="$(echo "$entry" | awk '{print $3}')"
+    # Only remove directory for non-local modules
+    if [ "$ctype" != "local" ] && [ -d "$target" ]; then
+        rm -rf "$target"
+    fi
+
+    # Remove from lockfile
+    tmp="$(mktemp)"
+    grep -v "^$name " "$SSS_LOCKFILE" > "$tmp" 2>/dev/null || true
+    mv "$tmp" "$SSS_LOCKFILE"
+
+    # Update .gitignore if needed
+    if [ -f ".gitignore" ]; then
+        tmp="$(mktemp)"
+        grep -vx "!.sss/modules/$name/" ".gitignore" > "$tmp" 2>/dev/null || true
+        mv "$tmp" ".gitignore"
+    fi
+
+    _t removed_module "$SELF" "$name"
+}
+
 # --- Principal ---
 
 CMD="${1:-help}"
@@ -552,6 +603,9 @@ case "$CMD" in
         ;;
     pin)
         _pin "$@"
+        ;;
+    remove)
+        _remove "$@"
         ;;
     self-update)
         _self_update "$@"

@@ -113,6 +113,16 @@ Para atualizar módulos fixados em uma branch:
 
 Módulos fixados em tag ou commit são ignorados pelo `update`. Use `require` novamente com o novo ref para mudá-los.
 
+**Nota sobre atualização:** o `require` verifica se a constraint mudou e, se sim, busca o novo ref (inclusive tags) e troca o checkout automaticamente.
+
+Para remover um módulo:
+
+```sh
+./sss remove sss-docker
+```
+
+Isso remove o módulo do lockfile e apaga a pasta em `.sss/modules/`.
+
 ### Módulos Locais
 
 Para módulos que já fazem parte do repositório (commitados no git), use `--local`:
@@ -153,4 +163,5 @@ cp sss meu-projeto
 | `install` | Restaura todos os módulos do lockfile |
 | `update [nome]` | Atualiza módulos com constraint de branch |
 | `pin <versão>` | Registra a versão requerida do sss no lockfile |
+| `remove <nome>` | Remove um módulo do lockfile e desinstala |
 | `self-update [versão]` | Atualiza o próprio sss |

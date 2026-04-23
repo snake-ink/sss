@@ -333,6 +333,79 @@ EOF
     grep -q "$new_resolved" .sss/modules.lock
 }
 
+# --- remove ---
+
+@test "remove ssem nome sssai com erro" {
+    run ./sss remove
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"remove needs"* ]]
+}
+
+@test "remove ssem lockfile sssai com erro" {
+    run ./sss remove fakemod
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"não está instalado"* ]]
+}
+
+@test "remove de módulo não no lockfile sssai com erro" {
+    mkdir -p .sss
+    touch .sss/modules.lock
+    run ./sss remove fakemod
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"não está instalado"* ]]
+}
+
+@test "remove remove diretório do módulo e entrada do lockfile" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    mkdir -p .sss/modules
+    git clone -q "$remote" .sss/modules/fake-remote
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$(git -C .sss/modules/fake-remote rev-parse HEAD)" > .sss/modules.lock
+    run ./sss remove fake-remote
+    [ "$status" -eq 0 ]
+    [ ! -d ".sss/modules/fake-remote" ]
+    ! grep -q "^fake-remote " .sss/modules.lock
+}
+
+@test "remove limpa .gitignore" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    mkdir -p .sss/modules
+    git clone -q "$remote" .sss/modules/fake-remote
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$(git -C .sss/modules/fake-remote rev-parse HEAD)" > .sss/modules.lock
+    printf '.sss/modules/*\n!.sss/modules/fake-remote/\n' > .gitignore
+    run ./sss remove fake-remote
+    [ "$status" -eq 0 ]
+    ! grep -q "fake-remote" .gitignore
+}
+
+@test "remove funciona quando módulo está no lockfile mas diretório está faltando" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    mkdir -p .sss
+    resolved="$(git -C "$remote" rev-parse HEAD)"
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$resolved" > .sss/modules.lock
+    run ./sss remove fake-remote
+    [ "$status" -eq 0 ]
+    ! grep -q "^fake-remote " .sss/modules.lock
+}
+
+@test "remove não apaga diretório de módulo local" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nexit 0\n' > localmod/module
+    chmod +x localmod/module
+    run ./sss require --local ./localmod
+    [ "$status" -eq 0 ]
+    [ -d "localmod" ]
+    run ./sss remove localmod
+    [ "$status" -eq 0 ]
+    [ -d "localmod" ]
+    ! grep -q "^localmod " .sss/modules.lock
+}
+
 # --- pin ---
 
 @test "pin ssem versssão sssai com erro" {
