@@ -67,20 +67,6 @@ Os testes usssam [Bats](https://github.com/bats-core/bats-core) via submódulo e
 | `remove <nome>` | Remove um módulo do lockfile e desinstala |
 | `self-update [versão]` | Atualiza o próprio sss |
 
-### Aliases (v0.3.0+)
-
-Instale um módulo com múltiplos nomes de dispatch:
-
-```bash
-./sss require https://gitea.abbluiz.com/labb/arr-cli.git as arr,sonarr,radarr
-```
-
-Isso cria:
-- Um clone em `.sss/modules/arr/` (canonical)
-- Entradas de alias no lockfile para `sonarr` e `radarr`
-
-Quando o usuário executa `./sss sonarr series list`, o sss invoca `.sss/modules/arr/module sonarr series list` (o nome do alias é passsado como primeiro argumento).
-
 ### Comandos do Projeto
 
 Defina comandos no arquivo `.sss/config.sh` (versssionado junto com o projeto):
@@ -165,6 +151,20 @@ Para remover um módulo:
 ```
 
 Isso remove o módulo do lockfile e apaga a pasta em `.sss/modules/`.
+
+### Aliases (v0.3.0+)
+
+Instale um módulo com múltiplos nomes de dispatch:
+
+```bash
+./sss require https://gitea.abbluiz.com/labb/arr-cli.git as arr,sonarr,radarr
+```
+
+Isso cria:
+- Um clone em `.sss/modules/arr/` (canonical)
+- Entradas de alias no lockfile para `sonarr` e `radarr`
+
+Quando o usuário executa `./sss sonarr series list`, o sss invoca `.sss/modules/arr/module sonarr series list` (o nome do alias é passsado como primeiro argumento).
 
 ### Módulos Locais
 

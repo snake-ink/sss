@@ -51,7 +51,6 @@ test/           # testes Bats
 ## Documentação
 
 - [README.md](README.md) — documentação de usuário
-- [docs/plans/sss-improvements.md](../docs/plans/sss-improvements.md) — plano de melhorias
 
 ## Arquitetura
 
