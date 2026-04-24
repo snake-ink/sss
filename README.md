@@ -1,44 +1,87 @@
 # sss 🐍
 
-Vai uma mãozinha? O `sss` é um jeito simplesss e leve de gerenciar e executar scripts auxiliaresss para o seu projeto.
+> Vai uma mãozinha? O `sss` é um jeito simplesss e leve de gerenciar e executar scripts auxiliaresss para o seu projeto.
 
-Sssem dependênciasss, sssem instalação: apenasss um arquivo shell na raiz do seu projeto.
+## Visão Geral
 
-## Como Funciona
+Sssem dependênciasss, sssem instalação: apenasss um arquivo shell POSIX na raiz do seu projeto. O `sss` gerencia módulos externos via git, comandos de projeto via `config.sh`, e variáveis de ambiente via `.env`.
 
-Copie o arquivo `sss` para a raiz do seu projeto e torne-o executável:
+## Quick Start
 
-```sh
+### Pré-Requisitos
+
+- git
+- shell POSIX (sh, bash, zsh, etc.)
+
+### Rodando
+
+```bash
+# Copie o arquivo para seu projeto e torne-o executável
 chmod +x sss
+
+# Veja os comandos disponíveis
+./sss help
+
+# Instale um módulo
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker
+
+# Execute um comando de projeto (definido em .sss/config.sh)
+./sss start
 ```
 
 Na primeira execução, o `sss` inicializa a pasta `.sss/` e adiciona `.sss/modules/` ao `.gitignore` automaticamente.
 
-## Variáveis de Ambiente
+## Desenvolvimento
 
-Crie o arquivo `.env` na raiz do projeto para definir variáveis disponíveis em `config.sh` e dentro de todos os módulos:
+### Testes
 
-```sh
-# .env
-export APP_NAME=meu-app
-export DATABASE_URL=postgres://localhost/meubanco
+```bash
+./sss test                        # suite completa
+./sss test -- --filter "nome"     # teste específico por nome
 ```
 
-O arquivo é carregado automaticamente antes de qualquer comando ser executado — inclusive comandos internos como `help` e `install`. Isso significa que você também pode controlar o comportamento do `sss` pelo próprio `.env`:
+Os testes usssam [Bats](https://github.com/bats-core/bats-core) via submódulo em `test/bats/`.
 
-```sh
-# .env
-export SSS_LANG=en
-export SSS_ENV=.env.local
+### Estrutura
+
+```
+.sss/           # diretório do sss (gitignored, exceto config.sh)
+  config.sh     # comandos do projeto (versionado)
+  modules/      # módulos instalados (gitignored)
+  modules.lock  # lockfile dos módulos (versionado)
 ```
 
-Para usar um caminho diferente sem depender do `.env`:
+## Comandos
 
-```sh
-SSS_ENV=.env.local ./sss start
+### Comandos Internos
+
+| Comando | Descrição |
+|---------|-----------|
+| `help` | Lista os comandos disponíveis |
+| `require <url>[@ref] [as <nome>[,<alias>...]]` | Adiciona um módulo remoto ao lockfile e instala |
+| `require --local <caminho>` | Registra um módulo local no lockfile |
+| `install` | Restaura todos os módulos do lockfile |
+| `update [nome]` | Atualiza módulos com constraint de branch |
+| `rebuild <nome>` | Reconstrói um módulo (remove e re-instala) |
+| `pin <versão>` | Registra a versão requerida do sss no lockfile |
+| `remove <nome>` | Remove um módulo do lockfile e desinstala |
+| `self-update [versão]` | Atualiza o próprio sss |
+
+### Aliases (v0.3.0+)
+
+Instale um módulo com múltiplos nomes de dispatch:
+
+```bash
+./sss require https://gitea.abbluiz.com/labb/arr-cli.git as arr,sonarr,radarr
 ```
 
-## Comandos do Projeto
+Isso cria:
+- Um clone em `.sss/modules/arr/` (canonical)
+- Entradas de alias no lockfile para `sonarr` e `radarr`
+
+Quando o usuário executa `./sss sonarr series list`, o sss invoca `.sss/modules/arr/module sonarr series list` (o nome do alias é passsado como primeiro argumento).
+
+### Comandos do Projeto
 
 Defina comandos no arquivo `.sss/config.sh` (versssionado junto com o projeto):
 
@@ -86,16 +129,16 @@ Módulos são extensões instaladas localmente via git. Podem ser escritos em qu
 Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ser uma branch, tag ou commit:
 
 ```sh
-./sss require https://github.com/snake-ink/sss-docker          # branch padrão
-./sss require https://github.com/snake-ink/sss-docker@main     # branch
-./sss require https://github.com/snake-ink/sss-docker@v1.2.0   # tag
-./sss require https://github.com/snake-ink/sss-docker@a3f91c2  # commit
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker          # branch padrão
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@main     # branch
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@v1.2.0   # tag
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@a3f91c2  # commit
 ```
 
 Use `as` para instalar com um nome diferente do repositório:
 
 ```sh
-./sss require https://github.com/snake-ink/sss-docker as docker
+./sss require https://gitea.abbluiz.com/snake-ink/sss-docker as docker
 ```
 
 O módulo é instalado em `.sss/modules/` (gitignored) e registrado em `.sss/modules.lock` (versionado). Para restaurar os módulos em outra máquina:
@@ -135,6 +178,30 @@ O lockfile registrará o caminho local. O `sss` não clona nem atualiza esse mó
 
 Se o módulo local estiver dentro de `.sss/modules/`, o `sss` adiciona uma exceção no `.gitignore` para que ele seja versionado.
 
+## Variáveis de Ambiente
+
+Crie o arquivo `.env` na raiz do projeto para definir variáveis disponíveis em `config.sh` e dentro de todos os módulos:
+
+```sh
+# .env
+export APP_NAME=meu-app
+export DATABASE_URL=postgres://localhost/meubanco
+```
+
+O arquivo é carregado automaticamente antes de qualquer comando ser executado — inclusive comandos internos como `help` e `install`. Isso significa que você também pode controlar o comportamento do `sss` pelo próprio `.env`:
+
+```sh
+# .env
+export SSS_LANG=en
+export SSS_ENV=.env.local
+```
+
+Para usar um caminho diferente sem depender do `.env`:
+
+```sh
+SSS_ENV=.env.local ./sss start
+```
+
 ## Internacionalização
 
 O idioma das mensagens é controlado pela variável de ambiente `SSS_LANG`:
@@ -146,22 +213,13 @@ SSS_LANG=pt ./sss help    # português (padrão)
 
 ## Renomeando
 
-O `sss` é apenas um arquivo: renomeie-o como quiser. O nome aparece corretamente em todos os outputs:
+O `sss` é apenas um arquivo: renomeie-o como quiser. O nome aparece corretamente em todos os outputsss:
 
 ```sh
 cp sss meu-projeto
 ./meu-projeto help
 ```
 
-## Comandos Internos
+---
 
-| Comando | Descrição |
-|---------|-----------|
-| `help` | Lista os comandos disponíveis |
-| `require <url>[@ref]` | Adiciona um módulo remoto ao lockfile e instala |
-| `require --local <caminho>` | Registra um módulo local no lockfile |
-| `install` | Restaura todos os módulos do lockfile |
-| `update [nome]` | Atualiza módulos com constraint de branch |
-| `pin <versão>` | Registra a versão requerida do sss no lockfile |
-| `remove <nome>` | Remove um módulo do lockfile e desinstala |
-| `self-update [versão]` | Atualiza o próprio sss |
+Veja [AGENTS.md](AGENTS.md) para detalhes técnicos e convenções de desenvolvimento.

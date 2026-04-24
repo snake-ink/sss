@@ -678,6 +678,140 @@ EOF
     [ "$output" = "ok" ]
 }
 
+# --- Aliases ---
+
+@test "require <url> as canonical,alias cria um clone e entradas de alias" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    run ./sss require "$remote" as fake-remote,alias1,alias2
+    [ "$status" -eq 0 ]
+    [ -d ".sss/modules/fake-remote" ]
+    [ "$(grep -c "^fake-remote " .sss/modules.lock)" -eq 1 ]
+    [ "$(grep -c "^alias1 " .sss/modules.lock)" -eq 1 ]
+    [ "$(grep -c "^alias2 " .sss/modules.lock)" -eq 1 ]
+    grep -q "alias:fake-remote:alias1" .sss/modules.lock
+    grep -q "alias:fake-remote:alias2" .sss/modules.lock
+}
+
+@test "sss alias invoca módulo canonical com nome do alias como primeiro argumento" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" as fake-remote,myalias > /dev/null
+    run ./sss myalias hello world
+    [ "$status" -eq 0 ]
+    [ "$output" = "fake module" ]
+}
+
+@test "install pula aliases e verifica canonical existe" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    resolved="$(git -C "$remote" rev-parse HEAD)"
+    mkdir -p .sss
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$resolved" > .sss/modules.lock
+    printf 'myalias %s alias:fake-remote:myalias -\n' "$remote" >> .sss/modules.lock
+    run ./sss install
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"alias"* ]]
+    [[ "$output" == *"fake-remote"* ]]
+    [ -d ".sss/modules/fake-remote" ]
+}
+
+@test "install falha quando canonical de alias não existe" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss
+    printf 'myalias %s alias:missing:myalias -\n' "$remote" > .sss/modules.lock
+    run ./sss install
+    [ "$status" -eq 1 ]
+}
+
+@test "remove de alias remove apenas entrada do lockfile" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" as fake-remote,myalias > /dev/null
+    [ -d ".sss/modules/fake-remote" ]
+    run ./sss remove myalias
+    [ "$status" -eq 0 ]
+    [ -d ".sss/modules/fake-remote" ]
+    ! grep -q "^myalias " .sss/modules.lock
+    grep -q "^fake-remote " .sss/modules.lock
+}
+
+@test "remove de canonical com aliases falha listando os aliases" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" as fake-remote,alias1,alias2 > /dev/null
+    run ./sss remove fake-remote
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"alias1"* ]]
+    [[ "$output" == *"alias2"* ]]
+    [ -d ".sss/modules/fake-remote" ]
+    grep -q "^fake-remote " .sss/modules.lock
+}
+
+@test "remove de canonical após remover todos aliases funciona" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" as fake-remote,myalias > /dev/null
+    ./sss remove myalias > /dev/null
+    run ./sss remove fake-remote
+    [ "$status" -eq 0 ]
+    [ ! -d ".sss/modules/fake-remote" ]
+    ! grep -q "^fake-remote " .sss/modules.lock
+}
+
+# --- rebuild ---
+
+@test "rebuild ssem nome sssai com erro" {
+    run ./sss rebuild
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"rebuild needs"* ]]
+}
+
+@test "rebuild de módulo não instalado sssai com erro" {
+    run ./sss rebuild fakemod
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"não está instalado"* ]]
+}
+
+@test "rebuild remove diretório e re-clona módulo" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    printf 'extra\n' > .sss/modules/fake-remote/extra.txt
+    [ -f ".sss/modules/fake-remote/extra.txt" ]
+    run ./sss rebuild fake-remote
+    [ "$status" -eq 0 ]
+    [ ! -f ".sss/modules/fake-remote/extra.txt" ]
+    [ -f ".sss/modules/fake-remote/module" ]
+}
+
+@test "rebuild de alias sssai com erro sugerindo canonical" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" as fake-remote,myalias > /dev/null
+    run ./sss rebuild myalias
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"fake-remote"* ]]
+}
+
+@test "rebuild de módulo local sssai com erro" {
+    mkdir -p localmod
+    printf '#!/bin/sh\nexit 0\n' > localmod/module
+    chmod +x localmod/module
+    ./sss require --local ./localmod > /dev/null
+    run ./sss rebuild localmod
+    [ "$status" -eq 1 ]
+}
+
 # --- Renameable ---
 
 @test "script ussssa ssseu próprio nome no output" {

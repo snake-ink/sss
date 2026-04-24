@@ -1,9 +1,9 @@
 #!/bin/sh
 # sss - vai uma mãozinha?
-# https://github.com/snake-ink/sss
+# https://gitea.abbluiz.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="v0.2.3"
+SSS_VERSION="v0.3.0"
 SSS_LANG="${SSS_LANG:-pt}"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
@@ -28,6 +28,7 @@ _t() {
                 install_desc) printf '  install               Installs modules from the lockfile\n' ;;
                 update_desc) printf '  update [name]         Updates modules with branch constraint\n' ;;
                 pin_desc) printf '  pin <version>         Registers the required version in the lockfile\n' ;;
+                rebuild_desc) printf '  rebuild <name>         Rebuilds a module by removing and re-installing it\n' ;;
                 self_update_desc) printf '  self-update [version] Updates %s itself\n' "$@" ;;
                 remove_desc) printf '  remove <name>          Removes a module from the lockfile and uninstalls it\n' ;;
                 removed_module) printf '%s: module "%s" removed\n' "$@" ;;
@@ -63,6 +64,13 @@ _t() {
                 local_verified) printf '%s: local module verified\n' "$@" ;;
                 local_not_found) printf '%s: local module not found at %s\n' "$@" ;;
                 local_skip) printf '%s: local module, skipping\n' "$@" ;;
+                alias_added) printf '%s: alias "%s" -> "%s" added\n' "$@" ;;
+                alias_skip_install) printf '%s: alias "%s" -> "%s" (skipping clone)\n' "$@" ;;
+                remove_has_aliases) printf '%s: module "%s" has aliases:%s. Remove them first.\n' "$@" ;;
+                alias_removed) printf '%s: alias "%s" removed\n' "$@" ;;
+                rebuild_desc) printf '  rebuild <name>         Rebuilds a module by removing and re-installing it\n' ;;
+                rebuilding) printf 'Rebuilding %s...\n' "$@" ;;
+                rebuild_done) printf '%s: module "%s" rebuilt\n' "$@" ;;
             esac
             ;;
         pt|*)
@@ -113,6 +121,13 @@ _t() {
                 local_verified) printf '%s: módulo local verificado\n' "$@" ;;
                 local_not_found) printf '%s: módulo local não encontrado em %s\n' "$@" ;;
                 local_skip) printf '%s: módulo local, pulando\n' "$@" ;;
+                alias_added) printf '%s: alias "%s" -> "%s" adicionado\n' "$@" ;;
+                alias_skip_install) printf '%s: alias "%s" -> "%s" (pulando clone)\n' "$@" ;;
+                remove_has_aliases) printf '%s: módulo "%s" possui aliases:%s. Remova-os primeiro.\n' "$@" ;;
+                alias_removed) printf '%s: alias "%s" removido\n' "$@" ;;
+                rebuild_desc) printf '  rebuild <nome>         Reconstrói um módulo removendo e re-instalando\n' ;;
+                rebuilding) printf 'Reconstruindo %s...\n' "$@" ;;
+                rebuild_done) printf '%s: módulo "%s" reconstruído\n' "$@" ;;
             esac
             ;;
     esac
@@ -171,6 +186,7 @@ _help() {
     _t install_desc
     _t update_desc
     _t pin_desc
+    _t rebuild_desc
     _t remove_desc
     _t self_update_desc "$SELF"
 
@@ -338,10 +354,21 @@ _require() {
     url="$_req_url"
     ref="$_req_ref"
     name="$(basename "$url" .git)"
+    aliases=""
     
-    # Support aliasing: require <url> as <name>
+    # Support aliasing: require <url> as <canonical>,<alias1>,<alias2>,...
     if [ "${2:-}" = "as" ] && [ -n "${3:-}" ]; then
-        name="$3"
+        names="$3"
+        # Extract canonical (first name before comma)
+        case "$names" in
+            *,*)
+                name="${names%%,*}"
+                aliases="${names#*,}"
+                ;;
+            *)
+                name="$names"
+                ;;
+        esac
     fi
     
     target="$SSS_MODULES/$name"
@@ -360,15 +387,21 @@ _require() {
         existing_constraint="$(grep "^$name " "$SSS_LOCKFILE" 2>/dev/null | awk '{print $3}')"
         if [ "$new_constraint" = "$existing_constraint" ]; then
             _t already_installed_same "$name"
-            return 0
+        else
+            _t updating_constraint "$name" "$existing_constraint" "$new_constraint"
+            if ! git -C "$target" checkout -q "$ref"; then
+                printf '%s: failed to checkout "%s"\n' "$SELF" "$ref" >&2
+                exit 1
+            fi
+            resolved="$(git -C "$target" rev-parse HEAD)"
+            _lockfile_set "$name" "$url" "$new_constraint" "$resolved"
+            _t install_done "$SELF" "$name"
         fi
-        _t updating_constraint "$name" "$existing_constraint" "$new_constraint"
-        if ! git -C "$target" checkout -q "$ref"; then
-            printf '%s: failed to checkout "%s"\n' "$SELF" "$ref" >&2
-            exit 1
+        
+        # Adiciona aliases se houver (idempotente: sobrescreve se existir)
+        if [ -n "$aliases" ]; then
+            _add_aliases "$name" "$url" "$aliases"
         fi
-        resolved="$(git -C "$target" rev-parse HEAD)"
-        _lockfile_set "$name" "$url" "$new_constraint" "$resolved"
         return 0
     fi
 
@@ -387,6 +420,34 @@ _require() {
     resolved="$(git -C "$target" rev-parse HEAD)"
     _lockfile_set "$name" "$url" "${ctype}:${ref}" "$resolved"
     _t install_done "$SELF" "$name"
+    
+    # Adiciona aliases se houver
+    if [ -n "$aliases" ]; then
+        _add_aliases "$name" "$url" "$aliases"
+    fi
+}
+
+# Adiciona entradas de alias no lockfile para um módulo canonical
+_add_aliases() {
+    _canonical="$1"
+    _url="$2"
+    _alias_list="$3"
+    
+    while [ -n "$_alias_list" ]; do
+        case "$_alias_list" in
+            *,*)
+                _alias="${_alias_list%%,*}"
+                _alias_list="${_alias_list#*,}"
+                ;;
+            *)
+                _alias="$_alias_list"
+                _alias_list=""
+                ;;
+        esac
+        [ -n "$_alias" ] || continue
+        _lockfile_set "$_alias" "$_url" "alias:${_canonical}:${_alias}" "-"
+        _t alias_added "$_alias" "$_canonical"
+    done
 }
 
 _install() {
@@ -408,6 +469,17 @@ _install() {
                     exit 1
                 fi
                 _t local_verified "$mod_name"
+                ;;
+            alias)
+                # Alias: verifica se o módulo canonical existe
+                _canonical_name="${mod_constraint#alias:}"
+                _canonical_name="${_canonical_name%%:*}"
+                _canonical_target="$SSS_MODULES/$_canonical_name"
+                if [ ! -d "$_canonical_target" ]; then
+                    _t module_required "$SELF" "$_canonical_name" "$SELF" >&2
+                    exit 1
+                fi
+                _t alias_skip_install "$mod_name" "$_canonical_name"
                 ;;
             *)
                 if [ -d "$target" ]; then
@@ -551,8 +623,36 @@ _remove() {
         exit 1
     fi
 
-    target="$SSS_MODULES/$name"
     ctype="$(echo "$entry" | awk '{print $3}')"
+
+    # Se for alias, remove apenas a entrada do lockfile
+    case "$ctype" in
+        alias:*)
+            tmp="$(mktemp)"
+            grep -v "^$name " "$SSS_LOCKFILE" > "$tmp" 2>/dev/null || true
+            mv "$tmp" "$SSS_LOCKFILE"
+            _t alias_removed "$SELF" "$name"
+            return 0
+            ;;
+    esac
+
+    # Se for canonical, verifica se há aliases apontando para ele
+    alias_list=""
+    while IFS=' ' read -r _mod_name _mod_url _mod_constraint _mod_resolved; do
+        case "$_mod_name" in ''|\#*|sss) continue ;; esac
+        case "$_mod_constraint" in
+            alias:$name:*)
+                alias_list="$alias_list $_mod_name"
+                ;;
+        esac
+    done < "$SSS_LOCKFILE"
+
+    if [ -n "$alias_list" ]; then
+        _t remove_has_aliases "$SELF" "$name" "$alias_list" >&2
+        exit 1
+    fi
+
+    target="$SSS_MODULES/$name"
     # Only remove directory for non-local modules
     if [ "$ctype" != "local" ] && [ -d "$target" ]; then
         rm -rf "$target"
@@ -571,6 +671,66 @@ _remove() {
     fi
 
     _t removed_module "$SELF" "$name"
+}
+
+_rebuild() {
+    name="$1"
+    if [ -z "$name" ]; then
+        printf '%s: rebuild needs a module name\n' "$SELF" >&2
+        exit 1
+    fi
+
+    if [ ! -f "$SSS_LOCKFILE" ]; then
+        _t not_installed "$SELF" "$name" >&2
+        exit 1
+    fi
+
+    # Check if module is in lockfile
+    entry="$(grep "^$name " "$SSS_LOCKFILE" 2>/dev/null)"
+    if [ -z "$entry" ]; then
+        _t not_installed "$SELF" "$name" >&2
+        exit 1
+    fi
+
+    ctype="$(echo "$entry" | awk '{print $3}')"
+    url="$(echo "$entry" | awk '{print $2}')"
+    mod_resolved="$(echo "$entry" | awk '{print $4}')"
+
+    # Se for alias, erro com hint
+    case "$ctype" in
+        alias:*)
+            canonical="${ctype#alias:}"
+            canonical="${canonical%%:*}"
+            printf '%s: "%s" is an alias. Rebuild the canonical module instead: %s rebuild %s\n' "$SELF" "$name" "$SELF" "$canonical" >&2
+            exit 1
+            ;;
+    esac
+
+    # Se for local, não faz sentido rebuild
+    if [ "$ctype" = "local" ]; then
+        printf '%s: cannot rebuild local module "%s"\n' "$SELF" "$name" >&2
+        exit 1
+    fi
+
+    target="$SSS_MODULES/$name"
+
+    _t rebuilding "$name"
+
+    # Remove o diretório do módulo
+    if [ -d "$target" ]; then
+        rm -rf "$target"
+    fi
+
+    # Re-clona e re-instala
+    git clone -q "$url" "$target"
+
+    ref="${ctype#*:}"
+    git -C "$target" checkout -q "$ref"
+
+    new_resolved="$(git -C "$target" rev-parse HEAD)"
+    _lockfile_set "$name" "$url" "$ctype" "$new_resolved"
+
+    _t rebuild_done "$SELF" "$name"
 }
 
 # --- Principal ---
@@ -606,6 +766,9 @@ case "$CMD" in
         ;;
     remove)
         _remove "$@"
+        ;;
+    rebuild)
+        _rebuild "$@"
         ;;
     self-update)
         _self_update "$@"
@@ -653,6 +816,29 @@ case "$CMD" in
                 "cmd_${_cand}" "$@"
                 exit $?
             fi
+        fi
+
+        # Verifica se é um alias no lockfile antes de tentar módulo direto
+        if [ -f "$SSS_LOCKFILE" ]; then
+            alias_constraint="$(awk -v n="$CMD" '$1==n {print $3; exit}' "$SSS_LOCKFILE")"
+            case "$alias_constraint" in
+                alias:*)
+                    alias_rest="${alias_constraint#alias:}"
+                    canonical="${alias_rest%%:*}"
+                    case "$alias_rest" in
+                        *:*) prepend_arg="${alias_rest#*:}" ;;
+                        *)   prepend_arg="" ;;
+                    esac
+                    canonical_module="$SSS_MODULES/$canonical/module"
+                    if [ -x "$canonical_module" ]; then
+                        if [ -n "$prepend_arg" ]; then
+                            exec "$canonical_module" "$prepend_arg" "$@"
+                        else
+                            exec "$canonical_module" "$@"
+                        fi
+                    fi
+                    ;;
+            esac
         fi
 
         # Tenta um módulo

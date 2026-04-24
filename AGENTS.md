@@ -1,22 +1,57 @@
-## sss
+# sss — Contexto para Agentes
 
-Ferramenta CLI de scripts para projetos git. Um único arquivo shell (`sss`) copiado para a raiz do projeto. Sem dependências além do próprio shell e do git.
+## O que é
 
-## Rodando os testes
+Ferramenta CLI de scripts para projetos git. Um único arquivo shell (`sss`) copiado para a raiz do projeto. Sssem dependências além do próprio shell e do git.
 
-```sh
-./sss test                        # suite completa
-./sss test -- --filter "nome"     # teste específico por nome
+## Stack
+
+- POSIX sh (`#!/bin/sh`)
+- git
+- Bats (para testes)
+
+## Estrutura do Projeto
+
+```
+.sss/           # diretório do sss (gitignored, exceto config.sh)
+  config.sh     # comandos do projeto (versionado)
+  modules/      # módulos instalados (gitignored)
+  modules.lock  # lockfile dos módulos (versionado)
+test/           # testes Bats
+  bats/         # submódulo bats-core
+  sss.bats      # suite de testes
 ```
 
-Os testes usam [Bats](https://github.com/bats-core/bats-core) via submódulo em `test/bats/`. O comando `test` está definido em `.sss/config.sh`.
+## Comandos Comuns
 
-Para rodar o bats diretamente:
-
-```sh
-./test/bats/bin/bats test/sss.bats
-./test/bats/bin/bats test/sss.bats --filter "nome do teste"
+```bash
+./sss help        # listar comandos disponíveis
+./sss test        # rodar testes
+./sss require     # adicionar módulo
+./sss install     # instalar módulos do lockfile
+./sss update      # atualizar módulos de branch
+./sss rebuild     # reconstruir módulo
 ```
+
+## Convenções
+
+- **Idioma:** comentários e outputs em **português**; nomes de variáveis e funções em inglês
+- **Snake speak:** aplicado de forma estética apenas em documentação e comentários — **não** em outputs de comando
+- **POSIX sh:** o script core deve ser compatível com POSIX sh; módulos podem usar qualquer linguagem
+- **Versão:** `SSS_VERSION` no topo do script deve ser atualizada a cada release; o lockfile referencia essa versão
+
+## Armadilhas
+
+- O script usa `#!/bin/sh` — não usar bashisms
+- `_init` é chamado antes do dispatch e verifica versão no lockfile (exceto para `self-update` e `pin`)
+- O `.env` é carregado após `_init` — pode sobrescrever `SSS_LANG`, `SSS_ENV`, etc.
+- Aliases no lockfile usam constraint `alias:<canonical>:<prepend-arg>`; não têm diretório próprio
+- `rebuild` de alias falha — deve-se rebuild o canonical
+
+## Documentação
+
+- [README.md](README.md) — documentação de usuário
+- [docs/plans/sss-improvements.md](../docs/plans/sss-improvements.md) — plano de melhorias
 
 ## Arquitetura
 
@@ -31,59 +66,38 @@ O script inteiro é um único arquivo POSIX sh. As funções internas usam prefi
    - Uma função `cmd_*` definida em `.sss/config.sh` (sourced sob demanda)
    - Um executável em `.sss/modules/<cmd>/module` (via `exec`)
    - Um módulo local registrado no lockfile (via `exec`)
+   - Um alias no lockfile (resolvido para canonical com prepend-arg)
 
 **Lockfile `.sss/modules.lock`:**
 
 - Primeira linha (opcional): `sss <versão>` — versão do próprio script requerida pelo projeto
 - Módulos remotos: `<nome> <url> <tipo>:<ref> <commit-resolvido>`
 - Módulos locais: `<nome> <caminho> local -`
+- Aliases: `<alias> <url> alias:<canonical>:<prepend-arg> -`
 - `_install` e `_update` pulam entradas com `mod_name == sss`
-- `pin` e `self-update` pulam o version check em `_init` (assim como `self-update`) para evitar deadlock ao trocar de versão
+- `pin` e `self-update` pulam o version check em `_init` para evitar deadlock ao trocar de versão
 
 **Dispatch de módulos vs config:**
 
 Config tem prioridade. Ordem de tentativa:
 1. `cmd_<nome>` definido no `config.sh`
-2. Executável em `.sss/modules/<nome>/module`
-3. Entrada `local` no lockfile apontando para `<caminho>/module`
+2. Alias no lockfile (`alias:*`) — resolve para canonical e exec com prepend-arg
+3. Executável em `.sss/modules/<nome>/module`
+4. Entrada `local` no lockfile apontando para `<caminho>/module`
 
 **Helper `requires`:**
 
-Disponível dentro de qualquer `cmd_*` no config. Verifica se os módulos listados estão disponíveis (instalados em `.sss/modules/` ou registrados como `local` no lockfile com diretório existente); falha com mensagem orientando o usuário a rodar `install` caso algum esteja ausente:
-
-```sh
-cmd_test() {
-    requires sss-docker
-    docker exec app php artisan test
-}
-```
+Disponível dentro de qualquer `cmd_*` no config. Verifica se os módulos listados estão disponíveis (instalados em `.sss/modules/` ou registrados como `local` no lockfile com diretório existente); falha com mensagem orientando o usuário a rodar `install` caso algum esteja ausente.
 
 **Variáveis de ambiente:**
 
-O arquivo definido em `SSS_ENV` (padrão: `.env` na raiz do projeto), se existir, é carregado logo após `_init` — antes mesmo do dispatch de comandos. Isso significa que o próprio `.env` pode sobrescrever configurações do `sss`, como `SSS_LANG` e `SSS_ENV`:
-
-```sh
-# .env
-export SSS_LANG=en
-export SSS_ENV=.env.local
-```
-
-Se `.env` redefinir `SSS_ENV` para outro caminho, o script carrega o novo arquivo em sequência.
-
-Para usar outro arquivo sem depender do `.env`: `SSS_ENV=.env.local ./sss start`
+O arquivo definido em `SSS_ENV` (padrão: `.env` na raiz do projeto), se existir, é carregado logo após `_init` — antes mesmo do dispatch de comandos. Se `.env` redefinir `SSS_ENV` para outro caminho, o script carrega o novo arquivo em sequência.
 
 **i18n:**
 
 Todas as mensagens de saída passam pela função `_t <chave> [args...]`. O idioma é definido pela variável `SSS_LANG`:
 - `pt` — padrão
 - `en` — inglês
-
-## Convenções
-
-- **Idioma:** comentários e outputs em **português**; nomes de variáveis e funções em inglês
-- **Snake speak:** aplicado de forma estética apenas em documentação e comentários — **não** em outputs de comando
-- **POSIX sh:** o script core deve ser compatível com POSIX sh (`#!/bin/sh`); módulos podem usar qualquer linguagem
-- **Versão:** `SSS_VERSION` no topo do script deve ser atualizada a cada release; o lockfile referencia essa versão
 
 ## Adicionando testes
 
