@@ -3,7 +3,7 @@
 # https://gitea.abbluiz.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="v0.3.0"
+SSS_VERSION="v0.3.1"
 SSS_LANG="${SSS_LANG:-pt}"
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
@@ -55,6 +55,7 @@ _t() {
                 download_failed) printf '%s: failed to download version "%s"\n' "$@" ;;
                 curl_wget_required) printf '%s: curl or wget required for self-update\n' "$@" ;;
                 updated_to_version) printf '%s: updated to version "%s"\n' "$@" ;;
+                replace_failed) printf '%s: failed to replace script\n' "$@" ;;
                 unknown_cmd) printf '%s: unknown command "%s"\n' "$@" ;;
                 run_help) printf 'Run "%s help" to see available commands.\n' "$@" ;;
                 module_required) printf '%s: module "%s" required. Run "%s install"\n' "$@" ;;
@@ -112,6 +113,7 @@ _t() {
                 download_failed) printf '%s: falha ao baixar versão "%s"\n' "$@" ;;
                 curl_wget_required) printf '%s: curl ou wget necessário para self-update\n' "$@" ;;
                 updated_to_version) printf '%s: atualizado para versão "%s"\n' "$@" ;;
+                replace_failed) printf '%s: falha ao substituir o script\n' "$@" ;;
                 unknown_cmd) printf '%s: comando desconhecido "%s"\n' "$@" ;;
                 run_help) printf 'Execute "%s help" para ver osss comandos disponíveis.\n' "$@" ;;
                 module_required) printf '%s: módulo "%s" necessário. Execute "%s install"\n' "$@" ;;
@@ -573,11 +575,11 @@ _self_update() {
     version_with_v="v${version_norm}"
     version_without_v="${version_norm}"
 
-    tmp="$(mktemp)"
+    tmp="$(mktemp "$(dirname "$0")/.sss_tmp.XXXXXX")"
     downloaded=0
 
     _try_download() {
-        _url="https://raw.githubusercontent.com/snake-ink/sss/${1}/sss"
+        _url="https://gitea.abbluiz.com/snake-ink/sss/raw/${1}/sss"
         if command -v curl >/dev/null 2>&1; then
             curl -fsSL "$_url" -o "$tmp" 2>/dev/null && return 0
         elif command -v wget >/dev/null 2>&1; then
@@ -599,7 +601,11 @@ _self_update() {
     fi
 
     chmod +x "$tmp"
-    mv "$tmp" "$0"
+    if ! mv "$tmp" "$0"; then
+        rm -f "$tmp"
+        _t replace_failed "$SELF" >&2
+        exit 1
+    fi
     _t updated_to_version "$SELF" "$version_norm"
     _lockfile_set_version "$version_norm"
 }
