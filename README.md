@@ -1,92 +1,98 @@
 # sss 🐍
 
-> Vai uma mãozinha? O `sss` é um jeito simplesss e leve de gerenciar e executar scripts auxiliaresss para o seu projeto.
+Vai uma mãozinha?
 
 ## Visão Geral
 
-Sssem dependênciasss, sssem instalação: apenasss um arquivo shell POSIX na raiz do seu projeto. O `sss` gerencia módulos externos via git, comandos de projeto via `config.sh`, e variáveis de ambiente via `.env`.
+O `sss` é um jeito simplesss e leve de gerenciar e executar _ssscriptsss_ auxiliaresss do seu projeto.
 
-## Quick Start
+Sssem dependênciasss obrigatórias, sssem instalação: apenasss um arquivo _ssshell_ POSIX na raiz do seu repositório. O `sss` gerencia módulosss externos via `git`, comandos de projeto via `config.sh`, e variáveis de ambiente via `.env`, dentre outrasss coisasss...
 
-### Pré-Requisitos
+## Início Rápido
 
-- git
-- shell POSIX (sh, bash, zsh, etc.)
+### Pré-Requisitosss
+
+- `git`
+- _ssshell_ POSIX (`sh`, `bash`, `zsh`, etc.)
 
 ### Rodando
 
-```bash
-# Copie o arquivo para seu projeto e torne-o executável
+```sh
+# Copie o arquivo no ssseu projeto pesssoal
+wget -q https://gitea.abbluiz.com/snake-ink/sss/raw/tag/v0.4.0/sss
+
+# Torne-o executável
 chmod +x sss
 
-# Veja os comandos disponíveis
+# Veja osss comandosss disponíveisss
 ./sss help
 
-# Instale um módulo
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker
-
-# Execute um comando de projeto (definido em .sss/config.sh)
-./sss start
+# Se quiser, pode até renomear o ssscript pra outra coisa, deixando a experiência com a "cara" do ssseu projeto
+mv sss xyz
+./xyz help
 ```
 
-Na primeira execução, o `sss` inicializa a pasta `.sss/` e adiciona `.sss/modules/` ao `.gitignore` automaticamente.
+Na primeira execução, o `sss` inicializa a passsta `.sss/` e adiciona `.sss/modules/` ao `.gitignore` automaticamente. É recomendado que os demaissss arquivosss permaneçam versssionadosss no seu repositório `git`. 
 
-## Desenvolvimento
-
-### Testes
-
-```bash
-./sss test                        # suite completa
-./sss test -- --filter "nome"     # teste específico por nome
-```
-
-Os testes usssam [Bats](https://github.com/bats-core/bats-core) via submódulo em `test/bats/`.
-
-### Estrutura
-
-```
-.sss/           # diretório do sss (gitignored, exceto config.sh)
-  config.sh     # comandos do projeto (versionado)
-  modules/      # módulos instalados (gitignored)
-  modules.lock  # lockfile dos módulos (versionado)
-```
-
-## Comandos
-
-### Comandos Internos
-
-| Comando | Descrição |
-|---------|-----------|
-| `help` | Lista os comandos disponíveis |
-| `require <url>[@ref] [as <nome>[,<alias>...]]` | Adiciona um módulo remoto ao lockfile e instala |
-| `require --local <caminho>` | Registra um módulo local no lockfile |
-| `install` | Restaura todos os módulos do lockfile |
-| `update [nome]` | Atualiza módulos com constraint de branch |
-| `rebuild <nome>` | Reconstrói um módulo (remove e re-instala) |
-| `docs list [--limit N] [--module M]` | Lista arquivos markdown de docs |
-| `docs search <termo> [--limit N] [--module M]` | Busca termo em arquivos markdown |
-| `pin <versão>` | Registra a versão requerida do sss no lockfile |
-| `remove <nome>` | Remove um módulo do lockfile e desinstala |
-| `self-update [versão]` | Atualiza o próprio sss |
-
-### Comandos do Projeto
-
-Defina comandos no arquivo `.sss/config.sh` (versssionado junto com o projeto):
+Dica: no fim do dia, o `sss` é apenasss um arquivo, e você pode renomeá-lo como quiser. O nome aparece corretamente em todos os outputsss:
 
 ```sh
+mv sss xyz
+./xyz help
+```
+
+Isso permite cussstomizar para a experiência do ssseu projeto, empresa, ou organização. No entanto, outras convenções como `.sss` e derivados não podem ssser renomeadosss, a menos que você modifique o _ssscript_ por conta própria 😉
+
+## Comandosss
+
+### Comandosss Internosss
+
+| Comando | Dessscrição |
+|---------|-----------|
+| `help` | Lista osss comandosss e módulosss disssponíveisss |
+| `require <url>[@ref] [as <nome>[,<alias>...]]` | Adiciona um módulo remoto ao lockfile e inssstala |
+| `require --local <caminho>` | Regissstra um módulo local no lockfile |
+| `install` | Ressstaura todosss osss módulosss do lockfile |
+| `update [nome]` | Atualiza módulosss com conssstraint de branch |
+| `rebuild <nome>` | Reconssstrói um módulo (remove e re-inssstala) |
+| `docs list [--limit N] [--module M]` | Lisssta arquivosss markdown de docsss |
+| `docs search <termo> [--limit N] [--module M]` | Busssca termo em arquivosss Markdown |
+| `pin <versão>` | Regissstra a versssão requerida do sss no lockfile |
+| `remove <nome>` | Remove um módulo do lockfile e desinssstala |
+| `self-update [versão]` | Atualiza o próprio sss |
+
+### Comandosss do Projeto
+
+Defina comandosss no arquivo `.sss/config.sh` (versssionado junto com o projeto):
+
+```sh
+#!/bin/sh
+
+# Dica: o comentário acima da definição de cada comando aparece em `./sss help` para dessscrevê-lo, mas sssomente uma linha.
+
 # Inicia o ambiente de desenvolvimento
 cmd_start() {
     docker compose up -d
 }
 
-# Executa os testes
+# Executa os tessstesss
 cmd_test() {
     docker exec app php artisan test "$@"
 }
 
 # Comandosss com múltiplasss palavrasss
 cmd_docker_build() {
-    docker build .
+    docker build "$@"
+}
+
+# Comando de exemplo que mossstra "Olá, Mundo!" na tela.
+cmd_hello_world() {
+    echo "Olá, Mundo!"
+}
+
+# Comando de exemplo que mossstra uma sssaudação na tela.
+cmd_greet() {
+    echo "Sssaudaçõesss a" "$@"
 }
 ```
 
@@ -95,106 +101,94 @@ Execute com:
 ```sh
 ./sss start
 ./sss test --filter NomeDoTeste
-./sss docker build        # essspaço ou underssscore funcionam
-./sss docker_build        # equivalente
+./sss docker build prod      # essspaço ou underssscore funcionam
+./sss docker_build prod      # equivalente
+./sss hello world
+./sss greet "Meu Nome"
 ```
 
-Sssub-comandosss com essspaço usssam longest-match: `./sss docker build prod` chama `cmd_docker_build "prod"`.
+Sssub-comandosss com essspaço usam longessst-match: `./sss docker build prod` chama `cmd_docker_build "prod"`.
 
 Use `requires` dentro de um comando para garantir que módulos necessários estejam instalados:
 
 ```sh
 cmd_deploy() {
-    requires sss-docker
+    requires letterboxd
     # ...
 }
 ```
 
-## Módulos
+## Módulosss
 
-Módulos são extensões instaladas localmente via git. Podem ser escritos em qualquer linguagem.
+Módulosss são extensssõesss inssstaladasss localmente via `git`. Podem ser escritosss em qualquer linguagem, desssde que incluam um ssscript _ssshell_ executável nomeado `module` na raiz do projeto.
 
-Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ser uma branch, tag ou commit:
-
-```sh
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker          # branch padrão
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@main     # branch
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@v1.2.0   # tag
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker@a3f91c2  # commit
-```
-
-Use `as` para instalar com um nome diferente do repositório:
+Use `require` para adicionar um módulo. O `@ref` é opcional. Pode ssser uma branch, tag ou commit:
 
 ```sh
-./sss require https://gitea.abbluiz.com/snake-ink/sss-docker as docker
+./sss require https://gitea.abbluiz.com/labb/letterboxd-cli           # branch padrão
+./sss require https://gitea.abbluiz.com/labb/letterboxd-cli@main      # branch específica
+./sss require https://gitea.abbluiz.com/labb/letterboxd-cli@v0.1.0    # tag específica
+./sss require https://gitea.abbluiz.com/labb/letterboxd-cli@a3f91c2   # commit específico
 ```
 
-O módulo é instalado em `.sss/modules/` (gitignored) e registrado em `.sss/modules.lock` (versionado). Para restaurar os módulos em outra máquina:
+Use `as` para inssstalar com um nome diferente do repositório:
+
+```sh
+./sss require https://gitea.abbluiz.com/labb/letterboxd-cli as letterboxd
+```
+
+O módulo é inssstalado em `.sss/modules/` (ignorado pelo `git`) e regissstrado em `.sss/modules.lock` (versssionado). Para ressstaurar osss módulosss em outra máquina:
 
 ```sh
 ./sss install
 ```
 
-Para atualizar módulos fixados em uma branch:
+Para atualizar módulosss fixados em uma branch:
 
 ```sh
-./sss update            # atualiza todos os de branch
-./sss update sss-docker # atualiza um específico
+./sss update                # atualiza todosss osss de branch
+./sss update letterboxd-cli # atualiza um específico
 ```
 
-Módulos fixados em tag ou commit são ignorados pelo `update`. Use `require` novamente com o novo ref para mudá-los.
+Módulosss fixadossss em tag ou commit são ignoradosss pelo `update`. Use `require` novamente com o novo ref para mudá-losss.
 
-**Nota sobre atualização:** o `require` verifica se a constraint mudou e, se sim, busca o novo ref (inclusive tags) e troca o checkout automaticamente.
+**Nota sobre atualização:** o `require` verifica se a conssstraint mudou e, ssse sssim, busssca o novo ref (inclusive tagsss) e troca o checkout automaticamente.
 
 Para remover um módulo:
 
 ```sh
-./sss remove sss-docker
+./sss remove letterboxd-cli
 ```
 
-Isso remove o módulo do lockfile e apaga a pasta em `.sss/modules/`.
+Isso remove o módulo do lockfile e apaga a passsta em `.sss/modules/`.
 
 ### Documentação (`docs`)
 
 O comando `docs` busca e lista documentação markdown no projeto e nos módulos:
 
 ```sh
-./sss docs list                           # lista todos os .md do projeto + módulos
-./sss docs list --module sss-docker       # lista docs/ do módulo sss-docker
-./sss docs search deploy                  # busca "deploy" em todos os .md
-./sss docs search deploy --module docker  # busca apenas no módulo docker
-./sss docs list --limit 20                # limita a 20 resultados (padrão: 100, 0 = ilimitado)
+./sss docs list                                  # lista arquivos .md do projeto + módulos conforme regra
+./sss docs list --module letterboxd-cli          # lista arquivos .md somente do módulo especificado
+./sss docs search deploy                         # busca em todos os .md
+./sss docs search deploy --module letterboxd-cli # busca apenas no módulo especificado
+./sss docs list --limit 20                       # limita a 20 resultados (padrão: 100, 0 = ilimitado)
 ```
 
-Busca em `docs/` na raiz do projeto e em `.sss/modules/*/docs/`. Usa `rg` se disponível, senão cai para `grep -rEn`.
+A busssca acontece nosss diretóriosss `docs/` do projeto e nos módulosss inssstaladosss, em `.sss/modules/*/docs/`; também busssca em arquivosss Markdown na raiz do projeto + módulos (exemplos: `README.md`, `AGENTS.md`, etc). Usa `rg` se disponível, senão cai para `grep -rEn`.
 
-### Aliases (v0.3.0+)
+### Módulosss Locaisss
 
-Instale um módulo com múltiplos nomes de dispatch:
-
-```bash
-./sss require https://gitea.abbluiz.com/labb/arr-cli.git as arr,sonarr,radarr
-```
-
-Isso cria:
-- Um clone em `.sss/modules/arr/` (canonical)
-- Entradas de alias no lockfile para `sonarr` e `radarr`
-
-Quando o usuário executa `./sss sonarr series list`, o sss invoca `.sss/modules/arr/module sonarr series list` (o nome do alias é passsado como primeiro argumento).
-
-### Módulos Locais
-
-Para módulos que já fazem parte do repositório (commitados no git), use `--local`:
+Para módulosss que já fazem parte do repositório (versssionados no `git`), use `--local`:
 
 ```sh
 ./sss require --local ./scripts/meu-modulo
 ```
 
-O lockfile registrará o caminho local. O `sss` não clona nem atualiza esse módulo — apenas o verifica. Isso é útil para scripts internos que você quer tratar como módulos.
+O lockfile regissstrará o caminho local. O `sss` não clona nem atualiza esse módulo — apenasss o verifica. Isso é útil para ssscriptsss internosss que você quer tratar como módulosss.
 
-Se o módulo local estiver dentro de `.sss/modules/`, o `sss` adiciona uma exceção no `.gitignore` para que ele seja versionado.
+Ssse o módulo local essstiver dentro de `.sss/modules/`, o `sss` adiciona uma exceção no `.gitignore` para que ele seja versssionado.
 
-## Variáveis de Ambiente
+## Variáveisss de Ambiente
 
 Crie o arquivo `.env` na raiz do projeto para definir variáveis disponíveis em `config.sh` e dentro de todos os módulos:
 
@@ -204,17 +198,14 @@ export APP_NAME=meu-app
 export DATABASE_URL=postgres://localhost/meubanco
 ```
 
-O arquivo é carregado automaticamente antes de qualquer comando ser executado — inclusive comandos internos como `help` e `install`. Isso significa que você também pode controlar o comportamento do `sss` pelo próprio `.env`:
+O arquivo é carregado automaticamente antesss de qualquer comando ser executado, inclusive comandosss internosss como `help` e `install`. Isso significa que você também pode controlar o comportamento do `sss` pelo próprio `.env`:
 
 ```sh
 # .env
 export SSS_LANG=en
-export SSS_ENV=.env.local
 ```
 
-**Auto-detect de idioma:** se `SSS_LANG` não estiver definido, o `sss` detecta automaticamente o idioma do sistema via `$LANG` ou `$LC_ALL`. Português (`pt_*`) é detectado como `pt`; qualquer outro idioma cai para `en`.
-
-Para usar um caminho diferente sem depender do `.env`:
+Você pode cussstomizar o local do ssseu arquivo `.env` com `SSS_ENV`:
 
 ```sh
 SSS_ENV=.env.local ./sss start
@@ -222,22 +213,44 @@ SSS_ENV=.env.local ./sss start
 
 ## Internacionalização
 
-O idioma das mensagens é controlado pela variável de ambiente `SSS_LANG`:
+O idioma dasss mensagensss pode ser controlado pela variável de ambiente `SSS_LANG`:
 
 ```sh
-SSS_LANG=en ./sss help    # inglês
-SSS_LANG=pt ./sss help    # português (padrão)
+SSS_LANG=en ./sss help    # English
+SSS_LANG=pt ./sss help    # Portuguêsss
 ```
 
-## Renomeando
+Ssse `SSS_LANG` não essstiver definido, o `sss` detecta automaticamente o idioma do sssissstema via `$LANG` ou `$LC_ALL`. Portuguêsss (`pt_*`) é detectado como `pt`; qualquer outro idioma cai para `en`.
 
-O `sss` é apenas um arquivo: renomeie-o como quiser. O nome aparece corretamente em todos os outputsss:
+### Aliasesss (v0.3.0+)
 
-```sh
-cp sss meu-projeto
-./meu-projeto help
+Avançado: inssstale um módulo com múltiplosss nomesss de dissspatch:
+
+```bash
+./sss require https://gitea.abbluiz.com/labb/arr-cli.git as arr,sonarr,radarr
 ```
+
+Isso cria:
+- Um clone em `.sss/modules/arr/` (canonical)
+- Entradasss de aliasss no lockfile para `sonarr` e `radarr`
+
+Quando o usuário executa `./sss sonarr series list`, o sss invoca `.sss/modules/arr/module sonarr series list` (o nome do alias é passsado como primeiro argumento).
+
+## Desenvolvimento
+
+O desenvolvimento é sssimplesss, poisss a lógica central essstá em apenasss um arquivo. Além disso, o próprio `sss` é utilizado para desenvolver o `sss` 🤯
+
+### Tessstesss
+
+Neste repositório:
+
+```bash
+./sss test                        # suite completa
+./sss test -- --filter "nome"     # tessste essspecífico por nome
+```
+
+Osss tessstesss usam [Bats](https://github.com/bats-core/bats-core) via sssubmódulo em `test/bats/`.
 
 ---
 
-Veja [AGENTS.md](AGENTS.md) para detalhes técnicos e convenções de desenvolvimento.
+Veja [AGENTS.md](AGENTS.md) para detalhesss técnicosss e convençõesss de desenvolvimento.
