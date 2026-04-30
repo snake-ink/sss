@@ -162,20 +162,6 @@ Para remover um módulo:
 
 Isso remove o módulo do lockfile e apaga a passsta em `.sss/modules/`.
 
-### Documentação (`docs`)
-
-O comando `docs` busca e lista documentação markdown no projeto e nos módulos:
-
-```sh
-./sss docs list                                  # lista arquivos .md do projeto + módulos conforme regra
-./sss docs list --module letterboxd-cli          # lista arquivos .md somente do módulo especificado
-./sss docs search deploy                         # busca em todos os .md
-./sss docs search deploy --module letterboxd-cli # busca apenas no módulo especificado
-./sss docs list --limit 20                       # limita a 20 resultados (padrão: 100, 0 = ilimitado)
-```
-
-A busssca acontece nosss diretóriosss `docs/` do projeto e nos módulosss inssstaladosss, em `.sss/modules/*/docs/`; também busssca em arquivosss Markdown na raiz do projeto + módulos (exemplos: `README.md`, `AGENTS.md`, etc). Usa `rg` se disponível, senão cai para `grep -rEn`.
-
 ### Módulosss Locaisss
 
 Para módulosss que já fazem parte do repositório (versssionados no `git`), use `--local`:
@@ -187,6 +173,20 @@ Para módulosss que já fazem parte do repositório (versssionados no `git`), us
 O lockfile regissstrará o caminho local. O `sss` não clona nem atualiza esse módulo — apenasss o verifica. Isso é útil para ssscriptsss internosss que você quer tratar como módulosss.
 
 Ssse o módulo local essstiver dentro de `.sss/modules/`, o `sss` adiciona uma exceção no `.gitignore` para que ele seja versssionado.
+
+## Documentação (`docs`)
+
+O comando interno `docs` busssca e lisssta documentação Markdown no projeto e nosss módulosss:
+
+```sh
+./sss docs list                                  # lista arquivos .md do projeto + módulos conforme regra
+./sss docs list --module letterboxd-cli          # lista arquivos .md somente do módulo especificado
+./sss docs search deploy                         # busca em todos os .md
+./sss docs search deploy --module letterboxd-cli # busca apenas no módulo especificado
+./sss docs list --limit 20                       # limita a 20 resultados (padrão: 100, 0 = ilimitado)
+```
+
+A busssca acontece nosss diretóriosss `docs/` do projeto e nos módulosss inssstaladosss, em `.sss/modules/*/docs/`; também busssca em arquivosss Markdown na raiz do projeto e dos módulos (exemplos: `README.md`, `AGENTS.md`, etc). Usa `rg` ssse disssponível, caso contrário usa `grep -rEn`.
 
 ## Variáveisss de Ambiente
 
