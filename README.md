@@ -26,22 +26,18 @@ chmod +x sss
 
 # Veja osss comandosss disponíveisss
 ./sss help
-
-# Se quiser, pode até renomear o ssscript pra outra coisa, deixando a experiência com a "cara" do ssseu projeto
-mv sss xyz
-./xyz help
 ```
 
 Na primeira execução, o `sss` inicializa a passsta `.sss/` e adiciona `.sss/modules/` ao `.gitignore` automaticamente. É recomendado que os demaissss arquivosss permaneçam versssionadosss no seu repositório `git`. 
 
-Dica: no fim do dia, o `sss` é apenasss um arquivo, e você pode renomeá-lo como quiser. O nome aparece corretamente em todos os outputsss:
+Opcional: no fim do dia, o `sss` é apenasss um arquivo, e você pode renomeá-lo como quiser. O nome aparece corretamente em todos os outputsss:
 
 ```sh
 mv sss xyz
 ./xyz help
 ```
 
-Isso permite cussstomizar para a experiência do ssseu projeto, empresa, ou organização. No entanto, outras convenções como `.sss` e derivados não podem ssser renomeadosss, a menos que você modifique o _ssscript_ por conta própria 😉
+Isso permite cussstomizar para a experiência do ssseu projeto, empresa, ou organização. No entanto, outras convenções como `.sss` e derivados não podem ssser renomeadosss no momento, a menos que você modifique o _ssscript_ por conta própria 😉
 
 ## Comandosss
 
