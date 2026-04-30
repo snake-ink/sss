@@ -8,6 +8,8 @@ setup() {
     git init -q
     git config user.email "tessst@snake.ink"
     git config user.name "Tessst"
+    # Força auto-detect para pt nos testes existentes
+    export LANG=pt_BR.UTF-8
 }
 
 teardown() {
@@ -810,6 +812,309 @@ EOF
     ./sss require --local ./localmod > /dev/null
     run ./sss rebuild localmod
     [ "$status" -eq 1 ]
+}
+
+# --- Language auto-detect ---
+
+@test "auto-detecta idioma pt do LANG" {
+    run env LANG=pt_BR.UTF-8 SSS_LANG= ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Uso:"* ]]
+}
+
+@test "auto-detecta idioma en do LANG" {
+    run env LANG=en_US.UTF-8 SSS_LANG= ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "auto-detecta idioma en quando LANG não é pt" {
+    run env LANG=fr_FR.UTF-8 SSS_LANG= ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "LC_ALL tem prioridade sobre LANG" {
+    run env LANG=pt_BR.UTF-8 LC_ALL=en_US.UTF-8 SSS_LANG= ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+@test "SSS_LANG definido manualmente sobrescreve auto-detect" {
+    run env LANG=pt_BR.UTF-8 SSS_LANG=en ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Usage:"* ]]
+}
+
+# --- Install divergent HEAD ---
+
+@test "install re-checkout quando HEAD diverge do lockfile" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    old_resolved="$(git -C "$remote" rev-parse HEAD)"
+    mkdir -p .sss/modules
+    git clone -q "$remote" .sss/modules/fake-remote
+    # Adiciona novo commit no remote
+    printf 'v2\n' > "$remote/version"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "v2"
+    new_resolved="$(git -C "$remote" rev-parse HEAD)"
+    # Lockfile com novo commit, mas clone local ainda no antigo
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$new_resolved" > .sss/modules.lock
+    run ./sss install
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"divergiu"* ]] || [[ "$output" == *"diverged"* ]]
+    # Lockfile deve ser atualizado com o novo commit
+    grep -q "$new_resolved" .sss/modules.lock
+}
+
+# --- Update fetch + reset ---
+
+@test "update usa fetch + reset em vez de pull" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    old_resolved="$(git -C "$remote" rev-parse HEAD)"
+    mkdir -p .sss/modules
+    git clone -q "$remote" .sss/modules/fake-remote
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$old_resolved" > .sss/modules.lock
+    # Adiciona novo commit no remote
+    printf 'v2\n' > "$remote/version"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "v2"
+    run ./sss update
+    [ "$status" -eq 0 ]
+    new_resolved="$(git -C "$remote" rev-parse HEAD)"
+    grep -q "$new_resolved" .sss/modules.lock
+}
+
+@test "update não cria merge commit" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    default_branch="$(git -C "$remote" rev-parse --abbrev-ref HEAD)"
+    old_resolved="$(git -C "$remote" rev-parse HEAD)"
+    mkdir -p .sss/modules
+    git clone -q "$remote" .sss/modules/fake-remote
+    printf 'fake-remote %s branch:%s %s\n' "$remote" "$default_branch" "$old_resolved" > .sss/modules.lock
+    # Cria um commit local (divergência)
+    printf 'local-change\n' > .sss/modules/fake-remote/local.txt
+    git -C .sss/modules/fake-remote add .
+    git -C .sss/modules/fake-remote -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "local"
+    # Adiciona commit no remote
+    printf 'v2\n' > "$remote/version"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "v2"
+    run ./sss update
+    [ "$status" -eq 0 ]
+    # Deve estar no commit do remote, não ter merge commit
+    new_resolved="$(git -C "$remote" rev-parse HEAD)"
+    [ "$(git -C .sss/modules/fake-remote rev-parse HEAD)" = "$new_resolved" ]
+    # Log deve ter apenas 2 commits (init + v2), não 3
+    [ "$(git -C .sss/modules/fake-remote rev-list --count HEAD)" -eq 2 ]
+}
+
+# --- docs ---
+
+@test "docs list lista arquivos markdown do projeto" {
+    mkdir -p docs
+    printf '# Hello\n' > docs/readme.md
+    printf '# World\n' > docs/guide.md
+    run ./sss docs list
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"readme.md"* ]]
+    [[ "$output" == *"guide.md"* ]]
+}
+
+@test "docs search busca termo em arquivos markdown" {
+    mkdir -p docs
+    printf '# Hello world\n' > docs/readme.md
+    printf '# Other\n' > docs/guide.md
+    run ./sss docs search world
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"readme.md"* ]]
+    [[ "$output" == *"world"* ]]
+    [[ "$output" != *"guide.md"* ]]
+}
+
+@test "docs list limita resultados com --limit" {
+    mkdir -p docs
+    printf '# test\n' > docs/a.md
+    printf '# test\n' > docs/b.md
+    printf '# test\n' > docs/c.md
+    run ./sss docs list --limit 2
+    [ "$status" -eq 0 ]
+    # Deve mostrar no máximo 2 resultados + mensagem de truncamento
+    [[ "$output" == *"a.md"* ]] || [[ "$output" == *"b.md"* ]] || [[ "$output" == *"c.md"* ]]
+    [[ "$output" == *"--limit 0"* ]] || [[ "$output" == *"limit"* ]]
+}
+
+@test "docs list lista arquivos de módulo específico com --module" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p "$remote/docs"
+    printf '# Module doc\n' > "$remote/docs/readme.md"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "add docs"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    run ./sss docs list --module fake-remote
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"readme.md"* ]]
+}
+
+@test "docs search busca em módulo específico com --module" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p "$remote/docs"
+    printf '# Module deploy\n' > "$remote/docs/readme.md"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "add docs"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    run ./sss docs search deploy --module fake-remote
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"readme.md"* ]]
+    [[ "$output" == *"deploy"* ]]
+}
+
+@test "docs mostra mensagem quando módulo não tem docs" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    run ./sss docs list --module fake-remote
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Markdown"* ]]
+}
+
+@test "docs mostra mensagem quando não há docs" {
+    run ./sss docs list
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Markdown"* ]] || [[ "$output" == *"nenhum"* ]] || [[ "$output" == *"no docs"* ]]
+}
+
+@test "docs search sem termo mostra erro" {
+    run ./sss docs search
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"requires"* ]] || [[ "$output" == *"requer"* ]]
+}
+
+@test "docs sem subcomando mostra uso" {
+    run ./sss docs
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Usage:"* ]] || [[ "$output" == *"Uso:"* ]]
+}
+
+@test "docs list lista arquivos markdown na raiz do projeto" {
+    printf '# Root doc\n' > README.md
+    printf '# Other\n' > CONTRIBUTING.md
+    run ./sss docs list
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+    [[ "$output" == *"CONTRIBUTING.md"* ]]
+}
+
+@test "docs search busca em arquivos markdown na raiz do projeto" {
+    printf '# Hello world\n' > README.md
+    printf '# Other\n' > CONTRIBUTING.md
+    run ./sss docs search world
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+    [[ "$output" == *"world"* ]]
+    [[ "$output" != *"CONTRIBUTING.md"* ]]
+}
+
+@test "docs list lista arquivos markdown na raiz do módulo" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    printf '# Root module doc\n' > "$remote/README.md"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "add root doc"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    run ./sss docs list --module fake-remote
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+}
+
+@test "docs search busca em arquivos markdown na raiz do módulo" {
+    remote="$TEST_DIR/fake-remote"
+    _make_fake_remote "$remote"
+    printf '# deploy instructions\n' > "$remote/README.md"
+    printf '# Other\n' > "$remote/OTHER.md"
+    git -C "$remote" add .
+    git -C "$remote" -c user.email="tessst@snake.ink" -c user.name="Tessst" commit -q -m "add root docs"
+    mkdir -p .sss/modules
+    ./sss require "$remote" > /dev/null
+    run ./sss docs search deploy --module fake-remote
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+    [[ "$output" == *"deploy"* ]]
+    [[ "$output" != *"OTHER.md"* ]]
+}
+
+@test "docs list combina raiz e docs/" {
+    printf '# Root\n' > README.md
+    mkdir -p docs
+    printf '# Deep\n' > docs/guide.md
+    run ./sss docs list
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"README.md"* ]]
+    [[ "$output" == *"guide.md"* ]]
+}
+
+@test "docs list encontra arquivos em subdiretórios de docs/" {
+    mkdir -p docs/sub
+    printf '# Sub doc\n' > docs/sub/nested.md
+    run ./sss docs list
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"nested.md"* ]]
+}
+
+# --- Module descriptions in help ---
+
+@test "help mostra descrição de módulo" {
+    mkdir -p .sss/modules/mymod
+    cat > .sss/modules/mymod/module << 'EOF'
+#!/bin/sh
+# My awesome module
+printf "ok\n"
+EOF
+    chmod +x .sss/modules/mymod/module
+    run ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"My awesome module"* ]]
+}
+
+@test "help mostra nome de módulo sem descrição quando não há comentário" {
+    mkdir -p .sss/modules/mymod
+    cat > .sss/modules/mymod/module << 'EOF'
+#!/bin/sh
+printf "ok\n"
+EOF
+    chmod +x .sss/modules/mymod/module
+    run ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"mymod"* ]]
+    [[ "$output" == *"--help"* ]]
+    [[ "$output" == *"docs list --module mymod"* ]]
+}
+
+@test "help ignora comentário que não está na segunda linha" {
+    mkdir -p .sss/modules/mymod
+    cat > .sss/modules/mymod/module << 'EOF'
+#!/bin/sh
+
+# This should be ignored
+printf "ok\n"
+EOF
+    chmod +x .sss/modules/mymod/module
+    run ./sss help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"mymod"* ]]
+    [[ "$output" != *"This should be ignored"* ]]
+    [[ "$output" == *"--help"* ]]
 }
 
 # --- Renameable ---

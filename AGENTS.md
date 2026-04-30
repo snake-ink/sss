@@ -31,6 +31,8 @@ test/           # testes Bats
 ./sss install     # instalar módulos do lockfile
 ./sss update      # atualizar módulos de branch
 ./sss rebuild     # reconstruir módulo
+./sss docs list   # listar arquivos markdown de docs
+./sss docs search <termo>  # buscar termo em arquivos markdown
 ```
 
 ## Convenções
@@ -47,6 +49,8 @@ test/           # testes Bats
 - O `.env` é carregado após `_init` — pode sobrescrever `SSS_LANG`, `SSS_ENV`, etc.
 - Aliases no lockfile usam constraint `alias:<canonical>:<prepend-arg>`; não têm diretório próprio
 - `rebuild` de alias falha — deve-se rebuild o canonical
+- `_install` detecta divergência de HEAD vs lockfile e faz `fetch + reset --hard origin/$ref`
+- `_update` usa `fetch + reset --hard origin/$ref` em vez de `git pull` para evitar merge commits
 
 ## Documentação
 
@@ -97,6 +101,18 @@ O arquivo definido em `SSS_ENV` (padrão: `.env` na raiz do projeto), se existir
 Todas as mensagens de saída passam pela função `_t <chave> [args...]`. O idioma é definido pela variável `SSS_LANG`:
 - `pt` — padrão
 - `en` — inglês
+
+Auto-detect: se `SSS_LANG` não estiver definido, o script detecta o idioma do sistema via `$LANG`/`$LC_ALL`. Padrão `pt` se corresponder a `pt_*`, senão `en`. O `.env` pode sobrescrever.
+
+**Docs:**
+
+O comando `docs` implementa descoberta e grep de documentação markdown:
+- `_docs_sources()` — lista diretórios `docs/` do projeto e `.sss/modules/*/docs/`
+- `_docs_is_module()` — verifica se um nome é módulo instalado ou registrado no lockfile
+- `_docs()` — parse de `--limit`/`-l`, despacho para listagem ou grep
+- Modo listagem: `find` + `sort` nos diretórios de docs
+- Modo grep: `rg --type md` se disponível, senão `grep -rEn --include='*.md'`
+- `--limit N` (padrão 100, 0 = ilimitado); mensagem de truncamento quando aplicável
 
 ## Adicionando testes
 

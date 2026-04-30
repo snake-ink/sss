@@ -3,8 +3,15 @@
 # https://gitea.abbluiz.com/snake-ink/sss
 
 SELF="$(basename "$0")"
-SSS_VERSION="v0.3.1"
-SSS_LANG="${SSS_LANG:-pt}"
+SSS_VERSION="v0.4.0"
+# Auto-detecta idioma do sistema se não definido
+if [ -z "${SSS_LANG:-}" ]; then
+    _sys_lang="${LC_ALL:-${LANG:-}}"
+    case "$_sys_lang" in
+        pt_*|pt) SSS_LANG="pt" ;;
+        *)       SSS_LANG="en" ;;
+    esac
+fi
 SSS_DIR=".sss"
 SSS_CONFIG="$SSS_DIR/config.sh"
 SSS_MODULES="$SSS_DIR/modules"
@@ -72,6 +79,14 @@ _t() {
                 rebuild_desc) printf '  rebuild <name>         Rebuilds a module by removing and re-installing it\n' ;;
                 rebuilding) printf 'Rebuilding %s...\n' "$@" ;;
                 rebuild_done) printf '%s: module "%s" rebuilt\n' "$@" ;;
+                reinstalling_diverged) printf '%s: HEAD diverged from lockfile (%s), re-checking out...\n' "$@" ;;
+                docs_desc) printf '  docs <list|search> [--limit N] [--module M]  Discovers and greps markdown docs\n' ;;
+                docs_no_module_docs) printf '%s: module "%s" has no Markdown files\n' "$@" ;;
+                docs_no_sources) printf '%s: no Markdown files found in project or modules\n' "$@" ;;
+                docs_truncated) printf '\n... (showing first %s results; use --limit 0 for all)\n' "$@" ;;
+                docs_search_needs_term) printf '%s: docs search requires a search term\n' "$@" ;;
+                docs_usage) printf 'Usage: %s docs <list|search term> [--limit N] [--module M]\n' "$@" ;;
+                module_no_desc) printf '  %-18s Run "%s %s --help" for how to use or "%s docs list --module %s" for Markdown docs.\n' "$@" ;;
             esac
             ;;
         pt|*)
@@ -130,6 +145,14 @@ _t() {
                 rebuild_desc) printf '  rebuild <nome>         Reconstrói um módulo removendo e re-instalando\n' ;;
                 rebuilding) printf 'Reconstruindo %s...\n' "$@" ;;
                 rebuild_done) printf '%s: módulo "%s" reconstruído\n' "$@" ;;
+                reinstalling_diverged) printf '%s: HEAD divergiu do lockfile (%s), re-checkout...\n' "$@" ;;
+                docs_desc) printf '  docs <list|search> [--limit N] [--module M]  Busca e lista docs markdown\n' ;;
+                docs_no_module_docs) printf '%s: módulo "%s" não possui arquivos Markdown\n' "$@" ;;
+                docs_no_sources) printf '%s: nenhum arquivo Markdown encontrado no projeto ou módulos\n' "$@" ;;
+                docs_truncated) printf '\n... (mostrando primeiros %s resultados; use --limit 0 para todos)\n' "$@" ;;
+                docs_search_needs_term) printf '%s: docs search requer um termo de busca\n' "$@" ;;
+                docs_usage) printf 'Uso: %s docs <list|search termo> [--limit N] [--module M]\n' "$@" ;;
+                module_no_desc) printf '  %-18s Execute "%s %s --help" para usar ou "%s docs list --module %s" para docs Markdown.\n' "$@" ;;
             esac
             ;;
     esac
@@ -180,6 +203,23 @@ _init() {
     fi
 }
 
+_module_description() {
+    _mod_exe="$1"
+    if [ ! -f "$_mod_exe" ]; then
+        return 1
+    fi
+    # Lê apenas a segunda linha; só retorna se for um comentário
+    _line2=$(sed -n '2p' "$_mod_exe")
+    case "$_line2" in
+        '# '*)
+            printf '%s\n' "${_line2#\# }"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 _help() {
     _t usage "$SELF"
     _t internal_cmds
@@ -191,6 +231,7 @@ _help() {
     _t rebuild_desc
     _t remove_desc
     _t self_update_desc "$SELF"
+    _t docs_desc
 
     if [ -f "$SSS_CONFIG" ]; then
         cmds=$(grep -E '^cmd_[a-zA-Z0-9_]+ *\(\)' "$SSS_CONFIG" | sed 's/^cmd_\([a-zA-Z0-9_]*\).*/\1/')
@@ -219,7 +260,14 @@ _help() {
             printf '\n'
             _t modules
             printf "$mods" | while IFS= read -r mod; do
-                [ -n "$mod" ] && printf '  %s\n' "$mod"
+                [ -n "$mod" ] || continue
+                _mod_exe="$SSS_MODULES/$mod/module"
+                _mod_desc="$(_module_description "$_mod_exe" 2>/dev/null || true)"
+                if [ -n "$_mod_desc" ]; then
+                    printf '  %-18s %s\n' "$mod" "$_mod_desc"
+                else
+                    _t module_no_desc "$mod" "$SELF" "$mod" "$SELF" "$mod"
+                fi
             done
         fi
     fi
@@ -485,7 +533,16 @@ _install() {
                 ;;
             *)
                 if [ -d "$target" ]; then
-                    _t already_installed_skip "$mod_name"
+                    _current_head="$(git -C "$target" rev-parse HEAD 2>/dev/null || true)"
+                    if [ -n "$mod_resolved" ] && [ "$mod_resolved" != "-" ] && [ "$_current_head" != "$mod_resolved" ]; then
+                        _t reinstalling_diverged "$mod_name" "$mod_resolved"
+                        git -C "$target" fetch -q origin
+                        git -C "$target" reset --hard "origin/$ref"
+                        _new_resolved="$(git -C "$target" rev-parse HEAD)"
+                        _lockfile_set "$mod_name" "$mod_url" "$mod_constraint" "$_new_resolved"
+                    else
+                        _t already_installed_skip "$mod_name"
+                    fi
                 else
                     _t installing "$mod_name"
                     git clone -q "$mod_url" "$target"
@@ -522,7 +579,8 @@ _update() {
         case "$ctype" in
             branch)
                 _t updating "$mod_name" "$ref"
-                git -C "$target" pull -q
+                git -C "$target" fetch -q origin
+                git -C "$target" reset --hard "origin/$ref"
                 new_resolved="$(git -C "$target" rev-parse HEAD)"
                 _lockfile_set "$mod_name" "$mod_url" "$mod_constraint" "$new_resolved"
                 updated=$((updated + 1))
@@ -739,6 +797,141 @@ _rebuild() {
     _t rebuild_done "$SELF" "$name"
 }
 
+# --- Docs ---
+
+_docs_sources() {
+    # Lista diretórios de docs e roots: projeto + módulos
+    printf '%s\n' "."  # project root
+    [ -d "docs" ] && printf '%s\n' "docs"
+    if [ -d "$SSS_MODULES" ]; then
+        for _mod in "$SSS_MODULES"/*; do
+            if [ -d "$_mod" ]; then
+                printf '%s\n' "$_mod"  # module root
+                [ -d "$_mod/docs" ] && printf '%s\n' "$_mod/docs"
+            fi
+        done
+    fi
+}
+
+_docs() {
+    _limit=100
+    _module=""
+    _subcmd=""
+    _term=""
+
+    # Parse args
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --limit|-l)
+                shift
+                _limit="${1:-100}"
+                shift
+                ;;
+            --module|-m)
+                shift
+                _module="${1:-}"
+                shift
+                ;;
+            *)
+                if [ -z "$_subcmd" ]; then
+                    _subcmd="$1"
+                elif [ -z "$_term" ]; then
+                    _term="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Valida subcmd antes de checar fontes
+    case "$_subcmd" in
+        list|search)
+            if [ "$_subcmd" = "search" ] && [ -z "$_term" ]; then
+                _t docs_search_needs_term "$SELF" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            _t docs_usage "$SELF" >&2
+            exit 1
+            ;;
+    esac
+
+    # Determina fontes
+    if [ -n "$_module" ]; then
+        _mod_root="$SSS_MODULES/$_module"
+        if [ ! -d "$_mod_root" ]; then
+            _t docs_no_module_docs "$SELF" "$_module" >&2
+            exit 1
+        fi
+        _sources="$(
+            printf '%s\n' "$_mod_root"
+            [ -d "$_mod_root/docs" ] && printf '%s\n' "$_mod_root/docs"
+        )"
+    else
+        _sources="$(_docs_sources)"
+    fi
+
+    # Build list of markdown files from sources
+    _tmpfile="$(mktemp)"
+    printf '%s\n' "$_sources" | while IFS= read -r _src; do
+        case "$_src" in
+            docs|*/docs)
+                find "$_src" -type f -name '*.md' -print
+                ;;
+            *)
+                for _f in "$_src"/*.md; do
+                    [ -f "$_f" ] && printf '%s\n' "$_f"
+                done
+                ;;
+        esac
+    done | sort > "$_tmpfile"
+
+    if [ ! -s "$_tmpfile" ]; then
+        _t docs_no_sources "$SELF" >&2
+        rm -f "$_tmpfile"
+        exit 1
+    fi
+
+    _outfile="$(mktemp)"
+    case "$_subcmd" in
+        list)
+            cat "$_tmpfile" > "$_outfile"
+            ;;
+        search)
+            if command -v rg >/dev/null 2>&1; then
+                while IFS= read -r _f; do
+                    [ -n "$_f" ] && rg -H -n "$_term" "$_f" 2>/dev/null
+                done < "$_tmpfile" > "$_outfile"
+            else
+                while IFS= read -r _f; do
+                    [ -n "$_f" ] && grep -H -n "$_term" "$_f" 2>/dev/null
+                done < "$_tmpfile" > "$_outfile"
+            fi
+            ;;
+        *)
+            _t docs_usage "$SELF" >&2
+            rm -f "$_tmpfile" "$_outfile"
+            exit 1
+            ;;
+    esac
+
+    _count="$(wc -l < "$_outfile" | tr -d ' ')"
+    case "$_limit" in
+        0) cat "$_outfile" ;;
+        ''|*[!0-9]*) head -n 100 "$_outfile" ;;
+        *)
+            if [ "$_count" -gt "$_limit" ]; then
+                head -n "$_limit" "$_outfile"
+                _t docs_truncated "$_limit"
+            else
+                cat "$_outfile"
+            fi
+            ;;
+    esac
+    rm -f "$_tmpfile" "$_outfile"
+}
+
 # --- Principal ---
 
 CMD="${1:-help}"
@@ -775,6 +968,9 @@ case "$CMD" in
         ;;
     rebuild)
         _rebuild "$@"
+        ;;
+    docs)
+        _docs "$@"
         ;;
     self-update)
         _self_update "$@"

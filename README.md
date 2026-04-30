@@ -63,6 +63,8 @@ Os testes usssam [Bats](https://github.com/bats-core/bats-core) via submódulo e
 | `install` | Restaura todos os módulos do lockfile |
 | `update [nome]` | Atualiza módulos com constraint de branch |
 | `rebuild <nome>` | Reconstrói um módulo (remove e re-instala) |
+| `docs list [--limit N] [--module M]` | Lista arquivos markdown de docs |
+| `docs search <termo> [--limit N] [--module M]` | Busca termo em arquivos markdown |
 | `pin <versão>` | Registra a versão requerida do sss no lockfile |
 | `remove <nome>` | Remove um módulo do lockfile e desinstala |
 | `self-update [versão]` | Atualiza o próprio sss |
@@ -152,6 +154,20 @@ Para remover um módulo:
 
 Isso remove o módulo do lockfile e apaga a pasta em `.sss/modules/`.
 
+### Documentação (`docs`)
+
+O comando `docs` busca e lista documentação markdown no projeto e nos módulos:
+
+```sh
+./sss docs list                           # lista todos os .md do projeto + módulos
+./sss docs list --module sss-docker       # lista docs/ do módulo sss-docker
+./sss docs search deploy                  # busca "deploy" em todos os .md
+./sss docs search deploy --module docker  # busca apenas no módulo docker
+./sss docs list --limit 20                # limita a 20 resultados (padrão: 100, 0 = ilimitado)
+```
+
+Busca em `docs/` na raiz do projeto e em `.sss/modules/*/docs/`. Usa `rg` se disponível, senão cai para `grep -rEn`.
+
 ### Aliases (v0.3.0+)
 
 Instale um módulo com múltiplos nomes de dispatch:
@@ -195,6 +211,8 @@ O arquivo é carregado automaticamente antes de qualquer comando ser executado �
 export SSS_LANG=en
 export SSS_ENV=.env.local
 ```
+
+**Auto-detect de idioma:** se `SSS_LANG` não estiver definido, o `sss` detecta automaticamente o idioma do sistema via `$LANG` ou `$LC_ALL`. Português (`pt_*`) é detectado como `pt`; qualquer outro idioma cai para `en`.
 
 Para usar um caminho diferente sem depender do `.env`:
 
